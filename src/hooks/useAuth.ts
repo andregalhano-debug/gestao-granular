@@ -8,17 +8,17 @@ export interface User {
 }
 
 const USERS: Record<string, { password: string; user: User }> = {
-  'andre@grupogranular.com.br': {
+  'andre.galhano@grupogranular.com.br': {
     password: 'granular2026',
-    user: { email: 'andre@grupogranular.com.br', name: 'André', initials: 'A', color: '#1B4332' }
+    user: { email: 'andre.galhano@grupogranular.com.br', name: 'André', initials: 'A', color: '#1B4332' }
   },
-  'eduardo@grupogranular.com.br': {
+  'eduardo.lage@grupogranular.com.br': {
     password: 'granular2026',
-    user: { email: 'eduardo@grupogranular.com.br', name: 'Eduardo', initials: 'E', color: '#1B4332' }
+    user: { email: 'eduardo.lage@grupogranular.com.br', name: 'Eduardo', initials: 'E', color: '#1B4332' }
   },
-  'gabriel@grupogranular.com.br': {
+  'gabriel.rocha@grupogranular.com.br': {
     password: 'granular2026',
-    user: { email: 'gabriel@grupogranular.com.br', name: 'Gabriel', initials: 'G', color: '#1B4332' }
+    user: { email: 'gabriel.rocha@grupogranular.com.br', name: 'Gabriel', initials: 'G', color: '#1B4332' }
   },
 }
 
