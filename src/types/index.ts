@@ -19,9 +19,14 @@ export interface Client {
   owner: Owner
   segment: 'food' | 'market' | 'farma' | 'outro'
   notes: string
+  briefing?: string
   next_action?: string
   contact_name?: string
+  phone?: string
+  instagram?: string
+  website?: string
   revenue_potential?: string
+  tags?: string[]
   last_update: string
 }
 
