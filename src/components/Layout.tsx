@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X } from 'lucide-react'
+import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X, ClipboardList } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useState } from 'react'
 
@@ -11,12 +11,17 @@ const nav = [
   { to: '/docs', icon: FolderOpen, label: 'Docs', desc: 'Links e documentos' },
 ]
 
+const ferramentas = [
+  { to: '/implantacao', icon: ClipboardList, label: 'Gestão de Implantação', desc: 'Cronograma e adoção' },
+]
+
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Home',
   '/tarefas': 'Tarefas',
   '/clientes': 'Clientes',
   '/agenda': 'Agenda',
   '/docs': 'Docs & Links',
+  '/implantacao': 'Gestão de Implantação',
 }
 
 export function Layout() {
@@ -47,6 +52,29 @@ export function Layout() {
               key={to}
               to={to}
               end={to === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
+                  isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={18} className={isActive ? 'text-white' : 'text-white/50 group-hover:text-white/80'} />
+                  <div>
+                    <p className="text-sm font-medium leading-tight">{label}</p>
+                    <p className={`text-[10px] leading-tight ${isActive ? 'text-white/60' : 'text-white/30 group-hover:text-white/40'}`}>{desc}</p>
+                  </div>
+                </>
+              )}
+            </NavLink>
+          ))}
+          <div className="mx-3 my-3 border-t border-white/10" />
+          <p className="px-3 text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Ferramentas</p>
+          {ferramentas.map(({ to, icon: Icon, label, desc }) => (
+            <NavLink
+              key={to}
+              to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
                   isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
@@ -116,6 +144,26 @@ export function Layout() {
                   key={to}
                   to={to}
                   end={to === '/'}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                      isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon size={18} />
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-[10px] text-white/40">{desc}</p>
+                  </div>
+                </NavLink>
+              ))}
+              <div className="mx-3 my-3 border-t border-white/10" />
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Ferramentas</p>
+              {ferramentas.map(({ to, icon: Icon, label, desc }) => (
+                <NavLink
+                  key={to}
+                  to={to}
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
