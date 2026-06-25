@@ -160,7 +160,7 @@ function PriorityCard({ p, onToggle, onRemove, onEdit, draggable, onDragStart }:
       className={`bg-white rounded-xl border px-3 py-2.5 cursor-pointer group transition-shadow hover:shadow-sm ${
         p.urgent ? 'border-red-200 bg-red-50/50' :
         p.important ? 'border-amber-200 bg-amber-50/30' :
-        p.done ? 'border-gray-100 opacity-50' :
+        p.done ? 'border-gray-100 opacity-60' :
         'border-gray-100'
       } ${p.private ? 'ring-1 ring-purple-200' : ''}`}
     >
@@ -196,6 +196,16 @@ function PriorityCard({ p, onToggle, onRemove, onEdit, draggable, onDragStart }:
           <X size={11} />
         </button>
       </div>
+      {p.done && (
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <button
+            onClick={e => { e.stopPropagation(); onToggle() }}
+            className="flex items-center gap-1 text-[10px] font-medium text-[#1B4332] hover:text-[#1B4332]/70 transition-colors"
+          >
+            <RotateCcw size={10} /> Reabrir
+          </button>
+        </div>
+      )}
     </div>
   )
 }
