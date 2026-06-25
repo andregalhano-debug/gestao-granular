@@ -276,6 +276,7 @@ export function TarefasPage() {
   const [newPriority, setNewPriority] = useState<Task['priority']>('media')
   const [newArea, setNewArea] = useState<Task['area']>('geral')
   const [newDeadline, setNewDeadline] = useState('')
+  const [newNotes, setNewNotes] = useState('')
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
 
@@ -307,9 +308,10 @@ export function TarefasPage() {
       id: Date.now().toString(), title: newTitle.trim(), owner: newOwner,
       done: false, priority: newPriority, area: newArea,
       deadline: newDeadline || undefined,
+      notes: newNotes.trim() || undefined,
       created_at: new Date().toISOString(),
     }])
-    setNewTitle(''); setNewPriority('media'); setNewArea('geral'); setNewDeadline(''); setShowAdd(false)
+    setNewTitle(''); setNewPriority('media'); setNewArea('geral'); setNewDeadline(''); setNewNotes(''); setShowAdd(false)
   }
 
   const handleDragStart = (t: Task) => { dragItem.current = t }
@@ -459,6 +461,12 @@ export function TarefasPage() {
                   ))}
                 </div>
               </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Notas</p>
+              <textarea value={newNotes} onChange={e => setNewNotes(e.target.value)} rows={2}
+                placeholder="Observações adicionais..."
+                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1B4332] resize-none" />
             </div>
             <div className="flex gap-2">
               <button onClick={addTask} className="flex-1 bg-[#1B4332] text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
