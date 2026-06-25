@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings, Users, Shield, Edit2, Check, Lock, Trash2, FileText } from 'lucide-react'
+import { Settings, Users, Shield, Edit2, Check, Lock, Trash2, FileText, LayoutGrid } from 'lucide-react'
 import { useAuth, ALL_USERS } from '../hooks/useAuth'
 import { useChangeLog } from '../hooks/useLocalData'
 import { format, parseISO } from 'date-fns'
@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale'
 type Role = 'admin' | 'editor' | 'viewer'
 type ActiveTab = 'users' | 'security' | 'log'
 
-interface UserConfig {
+export interface UserConfig {
   email: string
   name: string
   initials: string
@@ -17,7 +17,29 @@ interface UserConfig {
   canManageUsers: boolean
   canDeleteData: boolean
   canAccessSettings: boolean
+  allowedMenus?: string[]   // undefined = all allowed
+  allowedAreas?: string[]   // undefined = all allowed
 }
+
+const ALL_MENUS = [
+  { to: '/', label: 'Home' },
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/agenda', label: 'Agenda' },
+  { to: '/tarefas', label: 'Tarefas' },
+  { to: '/clientes', label: 'Clientes' },
+  { to: '/docs', label: 'Docs & Links' },
+  { to: '/settings', label: 'Configurações' },
+]
+
+const ALL_AREAS = [
+  { key: 'produto', label: '⚙️ Produto' },
+  { key: 'comercial', label: '💼 Comercial' },
+  { key: 'juridico', label: '⚖️ Jurídico' },
+  { key: 'financeiro', label: '💰 Financeiro' },
+  { key: 'geral', label: '📌 Geral' },
+  { key: 'marketing', label: '📣 Marketing' },
+  { key: 'operacoes', label: '🔧 Operações' },
+]
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
@@ -50,7 +72,7 @@ const LOG_ACTION_COLOR: Record<string, string> = {
   delete: 'bg-red-100 text-red-700',
 }
 
-function initConfigs(): UserConfig[] {
+export function initConfigs(): UserConfig[] {
   try {
     const stored = localStorage.getItem('gg_user_configs')
     if (stored) return JSON.parse(stored)
@@ -64,10 +86,12 @@ function initConfigs(): UserConfig[] {
     canManageUsers: u.role === 'admin',
     canDeleteData: u.role === 'admin',
     canAccessSettings: u.role === 'admin',
+    allowedMenus: undefined,
+    allowedAreas: undefined,
   }))
 }
 
-function saveConfigs(configs: UserConfig[]) {
+export function saveConfigs(configs: UserConfig[]) {
   localStorage.setItem('gg_user_configs', JSON.stringify(configs))
 }
 
@@ -102,11 +126,9 @@ function PasswordSection({ userEmail }: { userEmail: string }) {
     if (newPw.length < 6) { setError('A nova senha deve ter ao menos 6 caracteres.'); return }
     if (newPw !== confirmPw) { setError('As senhas não coincidem.'); return }
 
-    // Verify current password
     const stored = (() => {
       try { return JSON.parse(localStorage.getItem('gg_passwords') ?? '{}') } catch { return {} }
     })() as Record<string, string>
-    // Also check against static password if no override exists
     const STATIC_PW = 'granular2026'
     const currentStored = stored[userEmail]
     const expectedPw = currentStored ?? STATIC_PW
@@ -185,7 +207,11 @@ export function SettingsPage() {
 
   const startEdit = (cfg: UserConfig) => {
     setEditingEmail(cfg.email)
-    setEditForm({ ...cfg })
+    setEditForm({
+      ...cfg,
+      allowedMenus: cfg.allowedMenus ?? ALL_MENUS.map(m => m.to),
+      allowedAreas: cfg.allowedAreas ?? ALL_AREAS.map(a => a.key),
+    })
   }
 
   const cancelEdit = () => {
@@ -194,7 +220,16 @@ export function SettingsPage() {
   }
 
   const saveEdit = () => {
-    const updated = configs.map(c => c.email === editingEmail ? { ...c, ...editForm } as UserConfig : c)
+    const form = { ...editForm }
+    // If all menus are selected, store undefined (all allowed)
+    if (form.allowedMenus && form.allowedMenus.length === ALL_MENUS.length) {
+      form.allowedMenus = undefined
+    }
+    // If all areas are selected, store undefined (all allowed)
+    if (form.allowedAreas && form.allowedAreas.length === ALL_AREAS.length) {
+      form.allowedAreas = undefined
+    }
+    const updated = configs.map(c => c.email === editingEmail ? { ...c, ...form } as UserConfig : c)
     setConfigs(updated)
     saveConfigs(updated)
     setEditingEmail(null)
@@ -208,6 +243,18 @@ export function SettingsPage() {
     const updated = configs.map(c => c.email === email ? { ...c, active: !c.active } : c)
     setConfigs(updated)
     saveConfigs(updated)
+  }
+
+  const toggleMenu = (to: string) => {
+    const current = (editForm.allowedMenus ?? ALL_MENUS.map(m => m.to))
+    const next = current.includes(to) ? current.filter(m => m !== to) : [...current, to]
+    setEditForm(f => ({ ...f, allowedMenus: next }))
+  }
+
+  const toggleArea = (key: string) => {
+    const current = (editForm.allowedAreas ?? ALL_AREAS.map(a => a.key))
+    const next = current.includes(key) ? current.filter(a => a !== key) : [...current, key]
+    setEditForm(f => ({ ...f, allowedAreas: next }))
   }
 
   if (!isAdmin) {
@@ -265,8 +312,8 @@ export function SettingsPage() {
           {configs.map(cfg => (
             <div key={cfg.email} className={`bg-white rounded-xl border p-4 transition-all ${!cfg.active ? 'opacity-50 border-gray-100' : 'border-gray-100 hover:border-gray-200'}`}>
               {editingEmail === cfg.email ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 mb-3">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${OWNER_COLORS[cfg.initials] ?? 'bg-gray-100 text-gray-600'}`}>
                       {cfg.initials}
                     </div>
@@ -276,6 +323,7 @@ export function SettingsPage() {
                     </div>
                   </div>
 
+                  {/* Role */}
                   <div>
                     <p className="text-[10px] font-medium text-gray-500 uppercase mb-1.5">Função</p>
                     <div className="flex gap-2 flex-wrap">
@@ -289,6 +337,7 @@ export function SettingsPage() {
                     {editForm.role && <p className="text-[10px] text-gray-400 mt-1">{ROLE_DESC[editForm.role as Role]}</p>}
                   </div>
 
+                  {/* Specific permissions */}
                   <div>
                     <p className="text-[10px] font-medium text-gray-500 uppercase mb-1.5">Permissões específicas</p>
                     <div className="space-y-1.5">
@@ -305,6 +354,56 @@ export function SettingsPage() {
                         </label>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Menu permissions */}
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <LayoutGrid size={13} className="text-[#1B4332]" />
+                      <p className="text-[10px] font-medium text-gray-500 uppercase">Menus visíveis</p>
+                      {editForm.role === 'admin' && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Admin vê tudo</span>}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {ALL_MENUS.map(({ to, label }) => {
+                        const allowed = editForm.allowedMenus ?? ALL_MENUS.map(m => m.to)
+                        const checked = allowed.includes(to)
+                        return (
+                          <label key={to} className={`flex items-center gap-2 cursor-pointer px-2.5 py-1.5 rounded-lg border transition-colors ${checked ? 'bg-[#1B4332]/5 border-[#1B4332]/20' : 'border-gray-100 bg-gray-50'}`}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleMenu(to)}
+                              className="rounded accent-[#1B4332]" />
+                            <span className="text-xs text-gray-700">{label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setEditForm(f => ({ ...f, allowedMenus: ALL_MENUS.map(m => m.to) }))}
+                      className="mt-1.5 text-[10px] text-gray-400 hover:text-[#1B4332] transition-colors">
+                      Selecionar todos
+                    </button>
+                  </div>
+
+                  {/* Area permissions (Tarefas) */}
+                  <div className="border-t border-gray-100 pt-3">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase mb-2">Áreas visíveis em Tarefas</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {ALL_AREAS.map(({ key, label }) => {
+                        const allowed = editForm.allowedAreas ?? ALL_AREAS.map(a => a.key)
+                        const checked = allowed.includes(key)
+                        return (
+                          <label key={key} className={`flex items-center gap-2 cursor-pointer px-2.5 py-1.5 rounded-lg border transition-colors ${checked ? 'bg-[#1B4332]/5 border-[#1B4332]/20' : 'border-gray-100 bg-gray-50'}`}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleArea(key)}
+                              className="rounded accent-[#1B4332]" />
+                            <span className="text-xs text-gray-700">{label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setEditForm(f => ({ ...f, allowedAreas: ALL_AREAS.map(a => a.key) }))}
+                      className="mt-1.5 text-[10px] text-gray-400 hover:text-[#1B4332] transition-colors">
+                      Selecionar todas
+                    </button>
                   </div>
 
                   <div className="flex gap-2 pt-1">
@@ -327,10 +426,20 @@ export function SettingsPage() {
                       {cfg.email === user?.email && <span className="text-[10px] text-[#1B4332] bg-[#1B4332]/10 px-1.5 py-0.5 rounded-full">Você</span>}
                     </div>
                     <p className="text-xs text-gray-400 truncate">{cfg.email}</p>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 flex-wrap">
                       {cfg.canManageUsers && <span className="text-[10px] text-gray-500 flex items-center gap-0.5"><Shield size={9} /> Usuários</span>}
                       {cfg.canDeleteData && <span className="text-[10px] text-gray-500 flex items-center gap-0.5"><Trash2 size={9} /> Excluir</span>}
                       {cfg.canAccessSettings && <span className="text-[10px] text-gray-500 flex items-center gap-0.5"><Settings size={9} /> Config</span>}
+                      {cfg.allowedMenus && (
+                        <span className="text-[10px] text-amber-600 flex items-center gap-0.5">
+                          <LayoutGrid size={9} /> {cfg.allowedMenus.length}/{ALL_MENUS.length} menus
+                        </span>
+                      )}
+                      {cfg.allowedAreas && (
+                        <span className="text-[10px] text-blue-600 flex items-center gap-0.5">
+                          <LayoutGrid size={9} /> {cfg.allowedAreas.length}/{ALL_AREAS.length} áreas
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">

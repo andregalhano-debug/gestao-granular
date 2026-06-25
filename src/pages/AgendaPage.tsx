@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react'
 import { useMeetings } from '../hooks/useLocalData'
 import {
   format, isPast, parseISO, startOfWeek, addDays, addWeeks, subWeeks,
-  isSameDay, isToday,
+  isSameDay, isToday, startOfMonth, endOfMonth, addMonths, subMonths,
+  subDays, addDays as addD, eachDayOfInterval, getDay,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
@@ -225,12 +226,14 @@ function MeetingCard({ meeting: m, onClick, past }: MeetingCardProps) {
 // ─────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────
-type ViewMode = 'semanal' | 'lista'
+type ViewMode = 'semanal' | 'lista' | 'dia' | 'mes'
 
 export function AgendaPage() {
   const [meetings, setMeetings] = useMeetings()
   const [viewMode, setViewMode] = useState<ViewMode>('semanal')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const [selectedDay, setSelectedDay] = useState(() => new Date())
+  const [monthDate, setMonthDate] = useState(() => new Date())
   const [search, setSearch] = useState('')
   const [filterParticipant, setFilterParticipant] = useState<Owner | 'all'>('all')
   const [filterTag, setFilterTag] = useState<MeetingTag | 'all'>('all')
@@ -276,6 +279,13 @@ export function AgendaPage() {
     setModalMeeting(undefined)
   }
 
+  // Month view helpers
+  const monthStart = startOfMonth(monthDate)
+  const monthEnd = endOfMonth(monthDate)
+  const calStart = subDays(monthStart, getDay(monthStart) === 0 ? 6 : getDay(monthStart) - 1)
+  const calEnd = addD(monthEnd, getDay(monthEnd) === 0 ? 0 : 7 - getDay(monthEnd))
+  const calDays = eachDayOfInterval({ start: calStart, end: calEnd })
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -286,9 +296,17 @@ export function AgendaPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            <button onClick={() => setViewMode('dia')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'dia' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              Dia
+            </button>
             <button onClick={() => setViewMode('semanal')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'semanal' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
               <Calendar size={12} /> Semanal
+            </button>
+            <button onClick={() => setViewMode('mes')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'mes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              Mensal
             </button>
             <button onClick={() => setViewMode('lista')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'lista' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
@@ -337,6 +355,81 @@ export function AgendaPage() {
         </p>
       </div>
 
+      {/* ── DAY VIEW ─────────────────────────────── */}
+      {viewMode === 'dia' && (
+        <div>
+          {/* Day navigation */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setSelectedDay(d => subDays(d, 1))}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="text-center">
+              <p className={`text-base font-bold ${isToday(selectedDay) ? 'text-[#1B4332]' : 'text-gray-900'}`}>
+                {format(selectedDay, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+              </p>
+              {isToday(selectedDay) && <p className="text-xs text-[#1B4332]/60 font-medium">Hoje</p>}
+            </div>
+            <div className="flex items-center gap-1">
+              {!isToday(selectedDay) && (
+                <button onClick={() => setSelectedDay(new Date())}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                  Hoje
+                </button>
+              )}
+              <button onClick={() => setSelectedDay(d => addD(d, 1))}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Day meetings */}
+          {(() => {
+            const dayMeetings = meetingsForDay(selectedDay)
+            const upcomingDay = dayMeetings.filter(m => !isPast(parseISO(m.date)))
+            const pastDay = dayMeetings.filter(m => isPast(parseISO(m.date)))
+            return (
+              <div>
+                {dayMeetings.length === 0 ? (
+                  <div
+                    onClick={() => openNew(format(selectedDay, "yyyy-MM-dd'T'09:00"))}
+                    className="flex flex-col items-center justify-center py-16 rounded-2xl border-2 border-dashed border-gray-200 cursor-pointer hover:border-[#1B4332]/30 hover:bg-[#1B4332]/2 transition-colors">
+                    <Calendar size={32} className="text-gray-200 mb-3" />
+                    <p className="text-sm text-gray-400">Nenhuma reunião neste dia</p>
+                    <p className="text-xs text-gray-300 mt-1">Clique para adicionar</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingDay.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Próximas</p>
+                        {upcomingDay.map(m => (
+                          <MeetingCard key={m.id} meeting={m} onClick={() => setModalMeeting(m)} />
+                        ))}
+                      </div>
+                    )}
+                    {pastDay.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Realizadas</p>
+                        {pastDay.map(m => (
+                          <MeetingCard key={m.id} meeting={m} past onClick={() => setModalMeeting(m)} />
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => openNew(format(selectedDay, "yyyy-MM-dd'T'09:00"))}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-200 text-xs text-gray-400 hover:border-[#1B4332]/30 hover:text-[#1B4332] transition-colors">
+                      <Plus size={14} /> Adicionar reunião neste dia
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
       {/* ── WEEKLY VIEW ─────────────────────────────── */}
       {viewMode === 'semanal' && (
         <div>
@@ -367,8 +460,8 @@ export function AgendaPage() {
           <div className="grid grid-cols-7 gap-2 min-h-[400px]">
             {weekDays.map(day => {
               const dayMeetings = meetingsForDay(day)
-              const past = dayMeetings.filter(m => isPast(parseISO(m.date)))
-              const upcoming = dayMeetings.filter(m => !isPast(parseISO(m.date)))
+              const pastMeetings = dayMeetings.filter(m => isPast(parseISO(m.date)))
+              const upcomingMeetings = dayMeetings.filter(m => !isPast(parseISO(m.date)))
               const isCurrentDay = isToday(day)
 
               return (
@@ -387,12 +480,12 @@ export function AgendaPage() {
                   <div
                     onClick={() => openNew(format(day, "yyyy-MM-dd'T'09:00"))}
                     className="flex-1 w-full rounded-xl border border-dashed border-gray-100 hover:border-[#1B4332]/20 hover:bg-[#1B4332]/2 transition-colors min-h-[60px] p-1.5 flex flex-col gap-1.5 cursor-pointer">
-                    {upcoming.map(m => (
+                    {upcomingMeetings.map(m => (
                       <div key={m.id} onClick={e => { e.stopPropagation(); setModalMeeting(m) }}>
                         <MeetingCard meeting={m} onClick={() => setModalMeeting(m)} />
                       </div>
                     ))}
-                    {past.map(m => (
+                    {pastMeetings.map(m => (
                       <div key={m.id} onClick={e => { e.stopPropagation(); setModalMeeting(m) }}>
                         <MeetingCard meeting={m} past onClick={() => setModalMeeting(m)} />
                       </div>
@@ -401,6 +494,82 @@ export function AgendaPage() {
                       <div className="flex-1 flex items-center justify-center">
                         <Plus size={12} className="text-gray-200" />
                       </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── MONTH VIEW ─────────────────────────────── */}
+      {viewMode === 'mes' && (
+        <div>
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setMonthDate(d => subMonths(d, 1))}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="text-center">
+              <p className="text-base font-bold text-gray-900 capitalize">
+                {format(monthDate, "MMMM 'de' yyyy", { locale: ptBR })}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setMonthDate(new Date())}
+                className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                Hoje
+              </button>
+              <button onClick={() => setMonthDate(d => addMonths(d, 1))}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => (
+              <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {calDays.map(day => {
+              const dayMeetings = meetingsForDay(day)
+              const inMonth = day.getMonth() === monthDate.getMonth()
+              const isCurrentDay = isToday(day)
+              return (
+                <div
+                  key={day.toISOString()}
+                  onClick={() => { setSelectedDay(day); setViewMode('dia') }}
+                  className={`min-h-[72px] rounded-xl p-1.5 cursor-pointer transition-colors border ${
+                    isCurrentDay
+                      ? 'bg-[#1B4332] border-[#1B4332]'
+                      : inMonth
+                        ? 'bg-white border-gray-100 hover:border-[#1B4332]/30 hover:bg-[#1B4332]/3'
+                        : 'bg-gray-50/50 border-gray-50 opacity-40'
+                  }`}>
+                  <p className={`text-xs font-bold mb-1 ${isCurrentDay ? 'text-white' : inMonth ? 'text-gray-800' : 'text-gray-400'}`}>
+                    {format(day, 'd')}
+                  </p>
+                  <div className="space-y-0.5">
+                    {dayMeetings.slice(0, 3).map(m => (
+                      <div key={m.id}
+                        onClick={e => { e.stopPropagation(); setModalMeeting(m) }}
+                        className={`text-[9px] leading-tight px-1 py-0.5 rounded font-medium truncate ${
+                          isCurrentDay ? 'bg-white/20 text-white' : (m.tag ? TAG_CONFIG[m.tag].color : 'bg-[#1B4332]/10 text-[#1B4332]')
+                        }`}>
+                        {format(parseISO(m.date), 'HH:mm')} {m.title}
+                      </div>
+                    ))}
+                    {dayMeetings.length > 3 && (
+                      <p className={`text-[9px] font-bold ${isCurrentDay ? 'text-white/70' : 'text-gray-400'}`}>
+                        +{dayMeetings.length - 3} mais
+                      </p>
                     )}
                   </div>
                 </div>

@@ -1,9 +1,19 @@
 import { useState, useRef } from 'react'
 import { CheckCircle2, Circle, Plus, ChevronDown, ChevronUp, X, Check, RotateCcw, Trash2, Kanban, List, Calendar } from 'lucide-react'
 import { useTasks, useDeletedTasks } from '../hooks/useLocalData'
-import { parseISO, format } from 'date-fns'
+import { parseISO, format, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
 import type { Owner, Task } from '../types'
 import { SearchBar } from '../components/SearchBar'
+import { RightPanel } from '../components/RightPanel'
+import { useAuth } from '../hooks/useAuth'
+import type { UserConfig } from './SettingsPage'
+
+function getUserConfig(email: string): UserConfig | null {
+  try {
+    const configs = JSON.parse(localStorage.getItem('gg_user_configs') ?? '[]') as UserConfig[]
+    return configs.find(c => c.email === email) ?? null
+  } catch { return null }
+}
 
 const OWNER_COLORS: Record<Owner, string> = {
   A: 'bg-blue-100 text-blue-700', E: 'bg-purple-100 text-purple-700',
@@ -78,7 +88,7 @@ function TaskCard({ t, onToggle, onRemove, onEdit, onDateChange, faded, draggabl
         <div className="flex gap-1 mt-1 flex-wrap items-center">
           <span className={`text-[9px] font-bold px-1 py-0.5 rounded-full ${OWNER_COLORS[t.owner]}`}>{OWNER_LABELS[t.owner]}</span>
           <span className={`text-[9px] font-medium px-1 py-0.5 rounded-full ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</span>
-          <DateBadge value={t.deadline} onChange={d => { onDateChange(d); }} />
+          <DateBadge value={t.deadline} onChange={d => { onDateChange(d) }} />
         </div>
       </div>
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
@@ -200,8 +210,56 @@ function DeletedHistory({ deleted, onRestore }: { deleted: Task[]; onRestore: (t
   )
 }
 
+// ── Kanban Column (extracted to respect React rules of hooks) ─────────────────
+interface KanbanColumnProps {
+  area: Task['area']
+  items: Task[]
+  onToggle: (id: string) => void
+  onRemove: (id: string) => void
+  onEdit: (t: Task) => void
+  onDateChange: (id: string, d: string) => void
+  onDragStart: (t: Task) => void
+  onDrop: (area: Task['area']) => void
+}
+
+function KanbanColumn({ area, items, onToggle, onRemove, onEdit, onDateChange, onDragStart, onDrop }: KanbanColumnProps) {
+  const [over, setOver] = useState(false)
+  return (
+    <div
+      className={`flex-shrink-0 w-48 flex flex-col rounded-xl border-2 transition-colors ${over ? 'border-[#1B4332]/40' : 'border-transparent'}`}
+      onDragOver={e => { e.preventDefault(); setOver(true) }}
+      onDragLeave={() => setOver(false)}
+      onDrop={e => { e.preventDefault(); setOver(false); onDrop(area) }}
+    >
+      <div className="bg-[#1B4332]/10 rounded-t-xl px-3 py-2">
+        <p className="text-xs font-bold text-[#1B4332]">{AREA_LABELS[area]}</p>
+        <p className="text-[10px] text-[#1B4332]/60">{items.length} pendente(s)</p>
+      </div>
+      <div className="bg-gray-50 rounded-b-xl p-2 space-y-2 min-h-[100px] flex-1">
+        {items.map(t => (
+          <TaskCard key={t.id} t={t}
+            onToggle={() => onToggle(t.id)}
+            onRemove={() => onRemove(t.id)}
+            onEdit={() => onEdit(t)}
+            onDateChange={d => onDateChange(t.id, d)}
+            draggable
+            onDragStart={() => onDragStart(t)}
+          />
+        ))}
+        {items.length === 0 && <p className="text-[10px] text-gray-300 text-center pt-4">—</p>}
+      </div>
+    </div>
+  )
+}
+
 // ── Main TarefasPage ──────────────────────────────────────────────────────────
 export function TarefasPage() {
+  const { user } = useAuth()
+  const userConfig = getUserConfig(user?.email ?? '')
+  const visibleAreas = (user?.role === 'admin' || !userConfig?.allowedAreas)
+    ? (Object.keys(AREA_LABELS) as Task['area'][])
+    : (Object.keys(AREA_LABELS) as Task['area'][]).filter(a => userConfig!.allowedAreas!.includes(a))
+
   const [tasks, setTasks] = useTasks()
   const [deletedTasks, setDeletedTasks] = useDeletedTasks()
   const [filterOwner, setFilterOwner] = useState<Owner | 'all'>('all')
@@ -218,6 +276,8 @@ export function TarefasPage() {
   const [newPriority, setNewPriority] = useState<Task['priority']>('media')
   const [newArea, setNewArea] = useState<Task['area']>('geral')
   const [newDeadline, setNewDeadline] = useState('')
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
 
   const dragItem = useRef<Task | null>(null)
 
@@ -252,7 +312,6 @@ export function TarefasPage() {
     setNewTitle(''); setNewPriority('media'); setNewArea('geral'); setNewDeadline(''); setShowAdd(false)
   }
 
-  // DnD between kanban columns
   const handleDragStart = (t: Task) => { dragItem.current = t }
   const handleDropOnArea = (area: Task['area']) => {
     if (!dragItem.current || dragItem.current.area === area) return
@@ -265,12 +324,15 @@ export function TarefasPage() {
     if (filterArea !== 'all' && t.area !== filterArea) return false
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false
+    if (startDate && endDate && t.deadline) {
+      const d = parseISO(t.deadline)
+      if (!isWithinInterval(d, { start: startOfDay(startDate), end: endOfDay(endDate) })) return false
+    }
     return true
   })
 
-  // Sort: by deadline (newer first), then by priority
   const sortTasks = (arr: Task[]) => [...arr].sort((a, b) => {
-    if (a.deadline && b.deadline) return new Date(b.deadline).getTime() - new Date(a.deadline).getTime()
+    if (a.deadline && b.deadline) return new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
     if (a.deadline) return -1
     if (b.deadline) return 1
     const pOrder = { alta: 0, media: 1, baixa: 2 }
@@ -280,215 +342,224 @@ export function TarefasPage() {
   const pending = sortTasks(filtered.filter(t => !t.done))
   const done = filtered.filter(t => t.done)
 
-  const byArea = (Object.keys(AREA_LABELS) as Task['area'][]).reduce<Record<string, Task[]>>((acc, area) => {
+  const byArea = visibleAreas.reduce<Record<string, Task[]>>((acc, area) => {
     acc[area] = pending.filter(t => t.area === area)
     return acc
   }, {})
 
+  // Highlight dates: deadlines of all tasks
+  const highlightDates = tasks
+    .filter(t => t.deadline && !t.done)
+    .map(t => parseISO(t.deadline!))
+
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xl font-bold text-gray-900">Tarefas</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-              <List size={12} /> Lista
-            </button>
-            <button onClick={() => setViewMode('kanban')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-              <Kanban size={12} /> Kanban
-            </button>
-          </div>
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 bg-[#1B4332] text-white px-3 py-2 rounded-xl text-sm font-medium">
-            <Plus size={15} /> Nova
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="space-y-2">
-        <SearchBar value={search} onChange={setSearch} placeholder="Buscar tarefa..." />
-        <div className="flex gap-1.5 flex-wrap">
-          {(['all','A','E','G','D'] as const).map(o => (
-            <button key={o} onClick={() => setFilterOwner(o)}
-              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
-              {o === 'all' ? 'Todos' : OWNER_LABELS[o]}
-            </button>
-          ))}
-          <span className="text-gray-300 self-center">·</span>
-          {(['all', ...Object.keys(AREA_LABELS)] as (Task['area'] | 'all')[]).map(a => (
-            <button key={a} onClick={() => setFilterArea(a)}
-              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterArea === a ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
-              {a === 'all' ? 'Todas áreas' : AREA_LABELS[a as Task['area']]}
-            </button>
-          ))}
-          <span className="text-gray-300 self-center">·</span>
-          {(['all','alta','media','baixa'] as (Task['priority'] | 'all')[]).map(p => (
-            <button key={p} onClick={() => setFilterPriority(p)}
-              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterPriority === p ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
-              {p === 'all' ? 'Prioridade' : p}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Add form */}
-      {showAdd && (
-        <div className="bg-white rounded-xl border border-[#1B4332]/20 p-4 space-y-3">
-          <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Título da tarefa..."
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1B4332]" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Responsável</p>
-              <div className="flex gap-1 flex-wrap">
-                {(['A','E','G','D','todos'] as Owner[]).map(o => (
-                  <button key={o} onClick={() => setNewOwner(o)}
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
-                    {o === 'todos' ? 'Todos' : o}
-                  </button>
-                ))}
-              </div>
+    <div className="flex gap-4">
+      {/* Main content */}
+      <div className="flex-1 min-w-0 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-xl font-bold text-gray-900">Tarefas</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                <List size={12} /> Lista
+              </button>
+              <button onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                <Kanban size={12} /> Kanban
+              </button>
             </div>
-            <div>
-              <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Prazo</p>
-              <input type="date" value={newDeadline} onChange={e => setNewDeadline(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1 w-full focus:outline-none focus:border-[#1B4332]" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Prioridade</p>
-              <div className="flex gap-1 flex-wrap">
-                {(['alta','media','baixa'] as Task['priority'][]).map(p => (
-                  <button key={p} onClick={() => setNewPriority(p)}
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newPriority === p ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Área</p>
-              <div className="flex gap-1 flex-wrap">
-                {(Object.entries(AREA_LABELS) as [Task['area'], string][]).map(([a, label]) => (
-                  <button key={a} onClick={() => setNewArea(a)}
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newArea === a ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={addTask} className="flex-1 bg-[#1B4332] text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
-            <button onClick={() => setShowAdd(false)} className="px-4 border border-gray-200 rounded-lg text-sm text-gray-500">Cancelar</button>
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 bg-[#1B4332] text-white px-3 py-2 rounded-xl text-sm font-medium">
+              <Plus size={15} /> Nova
+            </button>
           </div>
         </div>
-      )}
 
-      {/* ── KANBAN VIEW ── */}
-      {viewMode === 'kanban' && (
-        <div className="overflow-x-auto pb-2 -mx-4 px-4">
-          <div className="flex gap-3" style={{ minWidth: `${Object.keys(AREA_LABELS).length * 200}px` }}>
-            {(Object.keys(AREA_LABELS) as Task['area'][]).map(area => {
-              const items = byArea[area] ?? []
-              const [over, setOver] = useState(false)
+        {/* Filters */}
+        <div className="space-y-2">
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar tarefa..." />
+          <div className="flex gap-1.5 flex-wrap">
+            {(['all','A','E','G','D'] as const).map(o => (
+              <button key={o} onClick={() => setFilterOwner(o)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
+                {o === 'all' ? 'Todos' : OWNER_LABELS[o]}
+              </button>
+            ))}
+            <span className="text-gray-300 self-center">·</span>
+            {(['all', ...Object.keys(AREA_LABELS)] as (Task['area'] | 'all')[]).map(a => (
+              <button key={a} onClick={() => setFilterArea(a)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterArea === a ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
+                {a === 'all' ? 'Todas áreas' : AREA_LABELS[a as Task['area']]}
+              </button>
+            ))}
+            <span className="text-gray-300 self-center">·</span>
+            {(['all','alta','media','baixa'] as (Task['priority'] | 'all')[]).map(p => (
+              <button key={p} onClick={() => setFilterPriority(p)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterPriority === p ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white'}`}>
+                {p === 'all' ? 'Prioridade' : p}
+              </button>
+            ))}
+          </div>
+          {(startDate || endDate) && (
+            <div className="flex items-center gap-2 text-xs text-[#1B4332] bg-[#1B4332]/5 px-3 py-1.5 rounded-lg w-fit">
+              <Calendar size={11} />
+              Prazo filtrado por data
+              <button onClick={() => { setStartDate(null); setEndDate(null) }} className="text-gray-400 hover:text-red-400">
+                <X size={11} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Add form */}
+        {showAdd && (
+          <div className="bg-white rounded-xl border border-[#1B4332]/20 p-4 space-y-3">
+            <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Título da tarefa..."
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1B4332]" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Responsável</p>
+                <div className="flex gap-1 flex-wrap">
+                  {(['A','E','G','D','todos'] as Owner[]).map(o => (
+                    <button key={o} onClick={() => setNewOwner(o)}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
+                      {o === 'todos' ? 'Todos' : o}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Prazo</p>
+                <input type="date" value={newDeadline} onChange={e => setNewDeadline(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 w-full focus:outline-none focus:border-[#1B4332]" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Prioridade</p>
+                <div className="flex gap-1 flex-wrap">
+                  {(['alta','media','baixa'] as Task['priority'][]).map(p => (
+                    <button key={p} onClick={() => setNewPriority(p)}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newPriority === p ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 mb-1 font-medium uppercase">Área</p>
+                <div className="flex gap-1 flex-wrap">
+                  {(Object.entries(AREA_LABELS) as [Task['area'], string][]).map(([a, label]) => (
+                    <button key={a} onClick={() => setNewArea(a)}
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border ${newArea === a ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={addTask} className="flex-1 bg-[#1B4332] text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 border border-gray-200 rounded-lg text-sm text-gray-500">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── KANBAN VIEW ── */}
+        {viewMode === 'kanban' && (
+          <div className="overflow-x-auto pb-2 -mx-4 px-4">
+            <div className="flex gap-3" style={{ minWidth: `${visibleAreas.length * 200}px` }}>
+              {visibleAreas.map(area => (
+                <KanbanColumn
+                  key={area}
+                  area={area}
+                  items={byArea[area] ?? []}
+                  onToggle={toggle}
+                  onRemove={remove}
+                  onEdit={setEditingTask}
+                  onDateChange={(id, d) => updateTask(id, { deadline: d || undefined })}
+                  onDragStart={handleDragStart}
+                  onDrop={handleDropOnArea}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── LIST VIEW ── */}
+        {viewMode === 'list' && (
+          <>
+            {visibleAreas.map(area => {
+              const items = pending.filter(t => t.area === area)
+              if (items.length === 0) return null
               return (
-                <div key={area}
-                  className={`flex-shrink-0 w-48 flex flex-col rounded-xl border-2 transition-colors ${over ? 'border-[#1B4332]/40' : 'border-transparent'}`}
-                  onDragOver={e => { e.preventDefault(); setOver(true) }}
-                  onDragLeave={() => setOver(false)}
-                  onDrop={e => { e.preventDefault(); setOver(false); handleDropOnArea(area) }}
-                >
-                  <div className="bg-[#1B4332]/10 rounded-t-xl px-3 py-2">
-                    <p className="text-xs font-bold text-[#1B4332]">{AREA_LABELS[area]}</p>
-                    <p className="text-[10px] text-[#1B4332]/60">{items.length} pendente(s)</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-b-xl p-2 space-y-2 min-h-[100px] flex-1">
+                <section key={area}>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    {AREA_LABELS[area]} <span className="font-normal">({items.length})</span>
+                  </h3>
+                  <div className="space-y-2">
                     {items.map(t => (
                       <TaskCard key={t.id} t={t}
                         onToggle={() => toggle(t.id)}
                         onRemove={() => remove(t.id)}
                         onEdit={() => setEditingTask(t)}
                         onDateChange={d => updateTask(t.id, { deadline: d || undefined })}
-                        draggable
-                        onDragStart={() => handleDragStart(t)}
                       />
                     ))}
-                    {items.length === 0 && <p className="text-[10px] text-gray-300 text-center pt-4">—</p>}
                   </div>
-                </div>
+                </section>
               )
             })}
-          </div>
-        </div>
-      )}
+            {pending.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Nenhuma tarefa pendente</p>}
+          </>
+        )}
 
-      {/* ── LIST VIEW ── */}
-      {viewMode === 'list' && (
-        <>
-          {(Object.keys(AREA_LABELS) as Task['area'][]).map(area => {
-            const items = pending.filter(t => t.area === area)
-            if (items.length === 0) return null
-            return (
-              <section key={area}>
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  {AREA_LABELS[area]} <span className="font-normal">({items.length})</span>
-                </h3>
-                <div className="space-y-2">
-                  {items.map(t => (
-                    <TaskCard key={t.id} t={t}
-                      onToggle={() => toggle(t.id)}
-                      onRemove={() => remove(t.id)}
-                      onEdit={() => setEditingTask(t)}
-                      onDateChange={d => updateTask(t.id, { deadline: d || undefined })}
-                    />
-                  ))}
-                </div>
-              </section>
-            )
-          })}
-          {pending.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Nenhuma tarefa pendente</p>}
-        </>
-      )}
+        {/* Completed tasks */}
+        {done.length > 0 && (
+          <section>
+            <button onClick={() => setShowDone(!showDone)} className="flex items-center gap-2 text-xs text-gray-400 font-medium mb-2">
+              {showDone ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {done.length} concluída(s)
+            </button>
+            {showDone && (
+              <div className="space-y-1.5">
+                {done.map(t => (
+                  <TaskCard key={t.id} t={t} faded
+                    onToggle={() => toggle(t.id)}
+                    onRemove={() => remove(t.id)}
+                    onEdit={() => setEditingTask(t)}
+                    onDateChange={d => updateTask(t.id, { deadline: d || undefined })}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
-      {/* Completed tasks */}
-      {done.length > 0 && (
-        <section>
-          <button onClick={() => setShowDone(!showDone)} className="flex items-center gap-2 text-xs text-gray-400 font-medium mb-2">
-            {showDone ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {done.length} concluída(s)
+        {/* Deleted history */}
+        <div>
+          <button onClick={() => setShowDeleted(d => !d)} className="flex items-center gap-2 text-xs text-gray-400 font-medium py-1">
+            {showDeleted ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            Histórico de excluídas ({deletedTasks.length})
           </button>
-          {showDone && (
-            <div className="space-y-1.5">
-              {done.map(t => (
-                <TaskCard key={t.id} t={t} faded
-                  onToggle={() => toggle(t.id)}
-                  onRemove={() => remove(t.id)}
-                  onEdit={() => setEditingTask(t)}
-                  onDateChange={d => updateTask(t.id, { deadline: d || undefined })}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+          {showDeleted && <DeletedHistory deleted={deletedTasks} onRestore={restoreTask} />}
+        </div>
 
-      {/* Deleted history */}
-      <div>
-        <button onClick={() => setShowDeleted(d => !d)} className="flex items-center gap-2 text-xs text-gray-400 font-medium py-1">
-          {showDeleted ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          Histórico de excluídas ({deletedTasks.length})
-        </button>
-        {showDeleted && <DeletedHistory deleted={deletedTasks} onRestore={restoreTask} />}
+        {/* Edit modal */}
+        {editingTask && (
+          <EditModal task={editingTask} onSave={fields => updateTask(editingTask.id, fields)} onCancel={() => setEditingTask(null)} />
+        )}
       </div>
 
-      {/* Edit modal */}
-      {editingTask && (
-        <EditModal task={editingTask} onSave={fields => updateTask(editingTask.id, fields)} onCancel={() => setEditingTask(null)} />
-      )}
+      {/* Right panel: date filter */}
+      <RightPanel
+        startDate={startDate}
+        endDate={endDate}
+        onDateChange={(s, e) => { setStartDate(s); setEndDate(e) }}
+        highlightDates={highlightDates}
+        defaultCollapsed={false}
+      />
     </div>
   )
 }
