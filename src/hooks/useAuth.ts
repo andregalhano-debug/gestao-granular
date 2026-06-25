@@ -20,6 +20,10 @@ const USERS: Record<string, { password: string; user: User }> = {
     password: 'granular2026',
     user: { email: 'gabriel.rocha@grupogranular.com.br', name: 'Gabriel', initials: 'G', color: '#1B4332' }
   },
+  'daniela.neves@grupogranular.com.br': {
+    password: 'granular2026',
+    user: { email: 'daniela.neves@grupogranular.com.br', name: 'Daniela', initials: 'D', color: '#1B4332' }
+  },
 }
 
 export function useAuth() {
