@@ -66,7 +66,7 @@ export function LoginPage() {
         </form>
 
         <p className="text-white/30 text-xs text-center mt-8">
-          Grupo Granular · Acesso restrito aos sócios
+          Grupo Granular · Acesso restrito
         </p>
       </div>
     </div>

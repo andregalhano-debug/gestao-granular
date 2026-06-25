@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { seedTasks, seedClients, seedMeetings, seedPriorities } from '../data/seed'
-import type { Task, Client, Meeting, Priority } from '../types'
+import type { Task, Client, Meeting, Priority, ChangeLog } from '../types'
 
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -30,4 +30,36 @@ export function useMeetings() {
 }
 export function usePriorities() {
   return useLocalStorage<Priority[]>('gg_priorities', seedPriorities)
+}
+export function useDeletedPriorities() {
+  return useLocalStorage<Priority[]>('gg_deleted_priorities', [])
+}
+export function useDeletedTasks() {
+  return useLocalStorage<Task[]>('gg_deleted_tasks', [])
+}
+export function useDeletedClients() {
+  return useLocalStorage<Client[]>('gg_deleted_clients', [])
+}
+export function useChangeLog() {
+  return useLocalStorage<ChangeLog[]>('gg_changelog', [])
+}
+
+export function appendLog(
+  _log: ChangeLog[],
+  setLog: (v: ChangeLog[] | ((p: ChangeLog[]) => ChangeLog[])) => void,
+  user: string,
+  action: string,
+  entity: string,
+  detail: string
+) {
+  const entry: ChangeLog = {
+    id: Date.now().toString(),
+    user,
+    action,
+    entity,
+    detail,
+    timestamp: new Date().toISOString(),
+  }
+  setLog(prev => [entry, ...prev].slice(0, 200))
+  return entry
 }

@@ -38,9 +38,9 @@ export const seedMeetings: Meeting[] = [
 ]
 
 export const seedPriorities: Priority[] = [
-  { id: '1', title: 'Fechar contrato SAJ & Manish', owner: 'A', urgent: true, done: false, created_at: new Date().toISOString() },
-  { id: '2', title: 'CNPJ Ponto Gestão — finalizar abertura', owner: 'A', urgent: true, done: false, created_at: new Date().toISOString() },
-  { id: '3', title: 'Entregar módulo Pessoas (RH) para produção', owner: 'E', urgent: true, done: false, created_at: new Date().toISOString() },
-  { id: '4', title: 'Demo Dorival — preparar sistema', owner: 'G', urgent: false, done: false, created_at: new Date().toISOString() },
-  { id: '5', title: 'Avançar reunião com Nando (sócio tech)', owner: 'G', urgent: false, done: false, created_at: new Date().toISOString() },
+  { id: '1', title: 'Fechar contrato SAJ & Manish', owner: 'A', urgent: true, important: true, done: false, private: false, tema: 'Comercial', description: 'Proposta final — 5+2 lojas', created_at: new Date().toISOString() },
+  { id: '2', title: 'CNPJ Ponto Gestão — finalizar abertura', owner: 'A', urgent: true, important: true, done: false, private: false, tema: 'Jurídico', description: 'Validar CNAEs com contador', created_at: new Date().toISOString() },
+  { id: '3', title: 'Entregar módulo Pessoas (RH) para produção', owner: 'E', urgent: true, important: true, done: false, private: false, tema: 'Produto', description: 'Módulo RH em fase final', created_at: new Date().toISOString() },
+  { id: '4', title: 'Demo Dorival — preparar sistema', owner: 'G', urgent: false, important: true, done: false, private: false, tema: 'Comercial', description: 'Foco no dashboard de vendas', created_at: new Date().toISOString() },
+  { id: '5', title: 'Avançar reunião com Nando (sócio tech)', owner: 'G', urgent: false, important: false, done: false, private: false, tema: 'Geral', created_at: new Date().toISOString() },
 ]
