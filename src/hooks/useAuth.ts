@@ -49,7 +49,7 @@ export function useAuth() {
 
   const signOut = () => {
     localStorage.removeItem('gg_user')
-    setUser(null)
+    window.location.replace('/login')
   }
 
   return { user, signIn, signOut }
