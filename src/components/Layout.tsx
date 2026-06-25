@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X, Settings, ChevronLeft, ChevronRight, BarChart2, Sun, Moon } from 'lucide-react'
+import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X, Settings, ChevronLeft, ChevronRight, BarChart2, Sun, Moon, ClipboardList } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useState, useEffect } from 'react'
 import { ChatPanel } from './ChatPanel'
@@ -23,6 +23,7 @@ const ALL_NAV = [
   { to: '/tarefas', icon: CheckSquare, label: 'Tarefas', desc: 'Checklist da equipe' },
   { to: '/clientes', icon: Users, label: 'Clientes', desc: 'Pipeline comercial' },
   { to: '/docs', icon: FolderOpen, label: 'Docs', desc: 'Links e documentos' },
+  { to: '/implantacao', icon: ClipboardList, label: 'Gestão de Implantação', desc: 'Cronograma e adoção' },
   { to: '/settings', icon: Settings, label: 'Configurações', desc: 'Usuários e permissões' },
 ]
 
@@ -40,6 +41,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/agenda': 'Agenda',
   '/docs': 'Docs & Links',
+  '/implantacao': 'Gestão de Implantação',
   '/settings': 'Configurações',
 }
 
