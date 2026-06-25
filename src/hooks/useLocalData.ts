@@ -31,3 +31,9 @@ export function useMeetings() {
 export function usePriorities() {
   return useLocalStorage<Priority[]>('gg_priorities', seedPriorities)
 }
+export function useDeletedPriorities() {
+  return useLocalStorage<Priority[]>('gg_deleted_priorities', [])
+}
+export function useDeletedTasks() {
+  return useLocalStorage<Task[]>('gg_deleted_tasks', [])
+}

@@ -7,6 +7,7 @@ import { TarefasPage } from './pages/TarefasPage'
 import { ClientesPage } from './pages/ClientesPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { DocsPage } from './pages/DocsPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="docs" element={<DocsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

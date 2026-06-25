@@ -1,21 +1,39 @@
-import { useState } from 'react'
-import { AlertCircle, CheckCircle2, Circle, Plus, X, Calendar } from 'lucide-react'
-import { usePriorities, useMeetings } from '../hooks/useLocalData'
+import { useState, useRef } from 'react'
+import {
+  AlertCircle, CheckCircle2, Circle, Plus, X, Calendar, List,
+  Kanban, Lock, Unlock, ChevronDown, ChevronUp, Clock,
+  Edit2, Check, Trash2, RotateCcw, ChevronLeft, ChevronRight
+} from 'lucide-react'
+import { usePriorities, useMeetings, useDeletedPriorities } from '../hooks/useLocalData'
 import { useAuth } from '../hooks/useAuth'
-import { format, isToday, isTomorrow, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
+import {
+  format, isToday, isTomorrow, parseISO, startOfWeek, endOfWeek,
+  addDays, addWeeks, subWeeks, addMonths, subMonths, startOfMonth,
+  endOfMonth, eachDayOfInterval, isSameDay, isSameMonth
+} from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import type { Owner } from '../types'
-import { SearchBar } from '../components/SearchBar'
-import { RightPanel } from '../components/RightPanel'
+import type { Owner, Priority } from '../types'
 
+// ── Constants ────────────────────────────────────────────────────────────────
 const OWNER_COLORS: Record<Owner, string> = {
   A: 'bg-blue-100 text-blue-700',
   E: 'bg-purple-100 text-purple-700',
   G: 'bg-orange-100 text-orange-700',
+  D: 'bg-pink-100 text-pink-700',
   todos: 'bg-gray-100 text-gray-600',
 }
 const OWNER_LABELS: Record<Owner, string> = {
-  A: 'André', E: 'Eduardo', G: 'Gabriel', todos: 'Todos'
+  A: 'André', E: 'Eduardo', G: 'Gabriel', D: 'Daniela', todos: 'Todos'
+}
+
+const TEMA_COLORS = [
+  '#1B4332', '#1d4ed8', '#7c3aed', '#be185d', '#b45309',
+  '#0f766e', '#dc2626', '#16a34a', '#9333ea', '#ea580c',
+]
+
+function getTemaColor(tema: string, all: string[]): string {
+  const idx = all.indexOf(tema)
+  return TEMA_COLORS[idx % TEMA_COLORS.length]
 }
 
 function formatMeetingDate(dateStr: string) {
@@ -25,189 +43,929 @@ function formatMeetingDate(dateStr: string) {
   return format(d, "dd/MM · HH:mm", { locale: ptBR })
 }
 
+// ── Mini Calendar (right panel) ───────────────────────────────────────────────
+function MiniCalendarPanel({
+  currentDate, onSelectDate
+}: { currentDate: Date; onSelectDate: (d: Date) => void }) {
+  const [viewMonth, setViewMonth] = useState(new Date())
+  const firstDay = startOfMonth(viewMonth)
+  const lastDay = endOfMonth(viewMonth)
+  const days = eachDayOfInterval({ start: startOfWeek(firstDay, { weekStartsOn: 0 }), end: endOfWeek(lastDay, { weekStartsOn: 0 }) })
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4 w-64 flex-shrink-0">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => setViewMonth(m => subMonths(m, 1))} className="text-gray-400 hover:text-gray-700">
+          <ChevronLeft size={14} />
+        </button>
+        <p className="text-xs font-semibold text-gray-700 capitalize">
+          {format(viewMonth, 'MMMM yyyy', { locale: ptBR })}
+        </p>
+        <button onClick={() => setViewMonth(m => addMonths(m, 1))} className="text-gray-400 hover:text-gray-700">
+          <ChevronRight size={14} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 text-center mb-1">
+        {['D','S','T','Q','Q','S','S'].map((d,i) => (
+          <span key={i} className="text-[9px] font-bold text-gray-400">{d}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map(d => {
+          const isSelected = isSameDay(d, currentDate)
+          const todayD = isToday(d)
+          const inMonth = isSameMonth(d, viewMonth)
+          return (
+            <button
+              key={d.toISOString()}
+              onClick={() => onSelectDate(d)}
+              className={`text-[10px] py-1 rounded-lg transition-colors leading-none ${
+                isSelected ? 'bg-[#1B4332] text-white font-bold' :
+                todayD ? 'text-[#1B4332] font-bold' :
+                !inMonth ? 'text-gray-300' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {format(d, 'd')}
+            </button>
+          )
+        })}
+      </div>
+      <button
+        onClick={() => { setViewMonth(new Date()); onSelectDate(new Date()) }}
+        className="w-full mt-2 text-[10px] text-[#1B4332] font-medium py-1 hover:bg-[#1B4332]/5 rounded-lg transition-colors"
+      >
+        Hoje
+      </button>
+    </div>
+  )
+}
+
+// ── Priority Card ─────────────────────────────────────────────────────────────
+interface CardProps {
+  p: Priority
+  onToggle: () => void
+  onRemove: () => void
+  onEdit: () => void
+  compact?: boolean
+  draggable?: boolean
+  onDragStart?: () => void
+}
+
+function PriorityCard({ p, onToggle, onRemove, onEdit, compact, draggable, onDragStart }: CardProps) {
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      className={`bg-white rounded-xl border px-3 py-2.5 flex items-start gap-2 group cursor-grab active:cursor-grabbing transition-shadow ${
+        p.urgent ? 'border-red-200 bg-red-50/50' :
+        p.important ? 'border-amber-200 bg-amber-50/30' :
+        'border-gray-100 hover:shadow-sm'
+      } ${p.private ? 'ring-1 ring-purple-200' : ''}`}
+    >
+      <button onClick={onToggle} className="mt-0.5 flex-shrink-0">
+        {p.done ? <CheckCircle2 size={16} className="text-[#1B4332]" /> : <Circle size={16} className="text-gray-300" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className={`text-xs leading-snug ${p.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>{p.title}</p>
+        {!compact && (p.description || p.tema) && (
+          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{p.description ?? p.tema}</p>
+        )}
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
+          {p.urgent && <span className="text-[9px] text-red-600 font-bold">🔴</span>}
+          {p.important && <span className="text-[9px] text-amber-600 font-bold">⭐</span>}
+          {p.private && <span className="text-[9px] text-purple-600 font-bold"><Lock size={8} className="inline" /></span>}
+          <span className={`text-[9px] font-bold px-1 py-0.5 rounded-full ${OWNER_COLORS[p.owner]}`}>{p.owner === 'todos' ? 'All' : p.owner}</span>
+          {p.tema && <span className="text-[9px] text-white font-medium px-1 py-0.5 rounded-full" style={{ backgroundColor: '#1B4332' }}>{p.tema}</span>}
+        </div>
+      </div>
+      <div className="flex-shrink-0 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={onEdit} className="text-gray-400 hover:text-[#1B4332] p-0.5"><Edit2 size={11} /></button>
+        <button onClick={onRemove} className="text-gray-300 hover:text-red-400 p-0.5"><X size={11} /></button>
+      </div>
+    </div>
+  )
+}
+
+// ── Add/Edit Form ─────────────────────────────────────────────────────────────
+interface FormProps {
+  initial?: Partial<Priority>
+  onSave: (p: Partial<Priority>) => void
+  onCancel: () => void
+  currentUser: string
+  privateMode: boolean
+}
+
+function PriorityForm({ initial, onSave, onCancel, currentUser, privateMode }: FormProps) {
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [owner, setOwner] = useState<Owner>(initial?.owner ?? 'todos')
+  const [urgent, setUrgent] = useState(initial?.urgent ?? false)
+  const [important, setImportant] = useState(initial?.important ?? false)
+  const [isPrivate, setIsPrivate] = useState(initial?.private ?? privateMode)
+  const [tema, setTema] = useState(initial?.tema ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [date, setDate] = useState(initial?.date ?? '')
+
+  const handleSave = () => {
+    if (!title.trim()) return
+    onSave({ title: title.trim(), owner, urgent, important, private: isPrivate, privateOwner: isPrivate ? currentUser : undefined, tema: tema.trim() || undefined, description: description.trim() || undefined, date: date || undefined })
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-[#1B4332]/20 p-4 space-y-3">
+      <input
+        autoFocus value={title} onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && handleSave()}
+        placeholder="Título da prioridade..."
+        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1B4332]"
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Responsável</p>
+          <div className="flex gap-1 flex-wrap">
+            {(['A','E','G','D','todos'] as Owner[]).map(o => (
+              <button key={o} onClick={() => setOwner(o)}
+                className={`text-[10px] px-2 py-0.5 rounded-full font-medium border transition-colors ${owner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
+                {o === 'todos' ? 'Todos' : o}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Data</p>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#1B4332] w-full" />
+        </div>
+      </div>
+      <div>
+        <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Tema</p>
+        <input value={tema} onChange={e => setTema(e.target.value)}
+          placeholder="Ex: Comercial, Produto, Jurídico..."
+          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B4332]" />
+      </div>
+      <div>
+        <p className="text-[10px] font-medium text-gray-500 uppercase mb-1">Descrição breve</p>
+        <input value={description} onChange={e => setDescription(e.target.value)}
+          placeholder="Contexto rápido..."
+          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B4332]" />
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setUrgent(!urgent)}
+          className={`text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors ${urgent ? 'bg-red-500 text-white border-red-500' : 'border-gray-200 text-gray-600'}`}>
+          🔴 Urgente
+        </button>
+        <button onClick={() => setImportant(!important)}
+          className={`text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors ${important ? 'bg-amber-400 text-white border-amber-400' : 'border-gray-200 text-gray-600'}`}>
+          ⭐ Importante
+        </button>
+        <button onClick={() => setIsPrivate(!isPrivate)}
+          className={`text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors flex items-center gap-1 ${isPrivate ? 'bg-purple-500 text-white border-purple-500' : 'border-gray-200 text-gray-600'}`}>
+          {isPrivate ? <Lock size={9} /> : <Unlock size={9} />} Particular
+        </button>
+      </div>
+      {(urgent || important) && (
+        <div className="text-[10px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+          <strong className="text-gray-600">Matriz Eisenhower:</strong>{' '}
+          {urgent && important ? '🔴⭐ Urgente + Importante → Faça agora' :
+           urgent ? '🔴 Urgente, não importante → Delegue ou agende' :
+           '⭐ Importante, não urgente → Planeje com cuidado'}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button onClick={handleSave} className="flex-1 bg-[#1B4332] text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
+        <button onClick={onCancel} className="px-4 border border-gray-200 rounded-lg text-sm text-gray-500">Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Drag Confirm Popup ────────────────────────────────────────────────────────
+interface DragConfirmProps {
+  priority: Priority
+  toDate: Date
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+function DragConfirmPopup({ priority, toDate, onConfirm, onCancel }: DragConfirmProps) {
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-5 max-w-sm w-full space-y-3">
+        <h3 className="text-sm font-bold text-gray-900">Confirmar mudança de data</h3>
+        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+          <p className="text-sm text-gray-700 font-medium">{priority.title}</p>
+          <div className="flex gap-1.5 flex-wrap">
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OWNER_COLORS[priority.owner]}`}>
+              {OWNER_LABELS[priority.owner]}
+            </span>
+            {priority.tema && (
+              <span className="text-[10px] text-white font-medium px-1.5 py-0.5 rounded-full bg-[#1B4332]">
+                {priority.tema}
+              </span>
+            )}
+            {priority.description && (
+              <span className="text-[10px] text-gray-500 px-1.5 py-0.5 rounded-full bg-gray-200">
+                {priority.description}
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-gray-600">
+          Mover para <strong className="text-[#1B4332] capitalize">{format(toDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}</strong>?
+        </p>
+        <div className="flex gap-2">
+          <button onClick={onConfirm} className="flex-1 bg-[#1B4332] text-white rounded-xl py-2 text-sm font-medium flex items-center justify-center gap-1.5">
+            <Check size={14} /> Confirmar
+          </button>
+          <button onClick={onCancel} className="flex-1 border border-gray-200 rounded-xl py-2 text-sm text-gray-600">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Kanban Column ─────────────────────────────────────────────────────────────
+interface KanbanColProps {
+  date: Date
+  items: Priority[]
+  isToday: boolean
+  onDrop: (date: Date) => void
+  onToggle: (id: string) => void
+  onRemove: (id: string) => void
+  onEdit: (p: Priority) => void
+  onDragStart: (p: Priority) => void
+}
+
+function KanbanColumn({ date, items, isToday: itIsToday, onDrop, onToggle, onRemove, onEdit, onDragStart }: KanbanColProps) {
+  const [over, setOver] = useState(false)
+  const pending = items.filter(p => !p.done)
+  const done = items.filter(p => p.done)
+
+  return (
+    <div
+      className={`flex-1 min-w-0 flex flex-col rounded-xl border-2 transition-colors ${over ? 'border-[#1B4332]/30 bg-[#1B4332]/5' : 'border-transparent'}`}
+      onDragOver={e => { e.preventDefault(); setOver(true) }}
+      onDragLeave={() => setOver(false)}
+      onDrop={e => { e.preventDefault(); setOver(false); onDrop(date) }}
+    >
+      {/* Column header */}
+      <div className={`px-3 py-2 rounded-t-xl text-center ${itIsToday ? 'bg-[#1B4332]' : 'bg-white'}`}>
+        <p className={`text-[9px] font-bold uppercase tracking-wider ${itIsToday ? 'text-white/70' : 'text-gray-400'}`}>
+          {format(date, 'EEE', { locale: ptBR })}
+        </p>
+        <div className={`text-lg font-black leading-none ${itIsToday ? 'text-white' : isToday(date) ? 'text-[#1B4332]' : 'text-gray-700'}`}>
+          {format(date, 'd')}
+        </div>
+      </div>
+
+      {/* Cards */}
+      <div className="flex-1 p-2 space-y-2 min-h-[120px] bg-gray-50/50 rounded-b-xl">
+        {pending.map(p => (
+          <PriorityCard
+            key={p.id} p={p}
+            onToggle={() => onToggle(p.id)}
+            onRemove={() => onRemove(p.id)}
+            onEdit={() => onEdit(p)}
+            compact
+            draggable
+            onDragStart={() => onDragStart(p)}
+          />
+        ))}
+        {done.map(p => (
+          <div key={p.id} className="opacity-40">
+            <PriorityCard
+              p={p}
+              onToggle={() => onToggle(p.id)}
+              onRemove={() => onRemove(p.id)}
+              onEdit={() => onEdit(p)}
+              compact
+            />
+          </div>
+        ))}
+        {items.length === 0 && (
+          <p className="text-[10px] text-gray-300 text-center pt-4">—</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Monthly Grid ──────────────────────────────────────────────────────────────
+function MonthlyGrid({
+  baseDate, priorities, onToggle, onRemove, onEdit
+}: { baseDate: Date; priorities: Priority[]; onToggle: (id: string) => void; onRemove: (id: string) => void; onEdit: (p: Priority) => void }) {
+  const firstDay = startOfMonth(baseDate)
+  const lastDay = endOfMonth(baseDate)
+  const days = eachDayOfInterval({ start: startOfWeek(firstDay, { weekStartsOn: 0 }), end: endOfWeek(lastDay, { weekStartsOn: 0 }) })
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+
+  const itemsForDay = (d: Date) => priorities.filter(p => p.date && isSameDay(parseISO(p.date), d))
+  const selectedItems = selectedDay ? itemsForDay(selectedDay) : []
+
+  return (
+    <div className="space-y-3">
+      {/* Day headers */}
+      <div className="grid grid-cols-7 text-center">
+        {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
+          <p key={d} className="text-[10px] font-bold text-gray-400 uppercase">{d}</p>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map(d => {
+          const items = itemsForDay(d)
+          const inMonth = isSameMonth(d, baseDate)
+          const todayD = isToday(d)
+          const selected = selectedDay && isSameDay(d, selectedDay)
+          return (
+            <button
+              key={d.toISOString()}
+              onClick={() => setSelectedDay(prev => prev && isSameDay(prev, d) ? null : d)}
+              className={`rounded-xl p-2 text-left transition-all min-h-[64px] border ${
+                selected ? 'border-[#1B4332] bg-[#1B4332]/5' :
+                todayD ? 'border-[#1B4332]/30 bg-[#1B4332]/5' :
+                !inMonth ? 'border-transparent bg-transparent' :
+                'border-gray-100 bg-white hover:border-gray-200'
+              }`}
+            >
+              <span className={`text-xs font-bold ${!inMonth ? 'text-gray-300' : todayD ? 'text-[#1B4332]' : 'text-gray-600'}`}>
+                {format(d, 'd')}
+              </span>
+              <div className="mt-1 space-y-0.5">
+                {items.slice(0, 2).map(p => (
+                  <div key={p.id} className={`text-[9px] px-1 py-0.5 rounded font-medium truncate ${p.urgent ? 'bg-red-100 text-red-700' : p.important ? 'bg-amber-100 text-amber-700' : 'bg-[#1B4332]/10 text-[#1B4332]'}`}>
+                    {p.title}
+                  </div>
+                ))}
+                {items.length > 2 && <div className="text-[9px] text-gray-400">+{items.length - 2}</div>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {selectedDay && selectedItems.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <p className="text-xs font-bold text-gray-700 mb-2 capitalize">
+            {format(selectedDay, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+          </p>
+          <div className="space-y-2">
+            {selectedItems.map(p => (
+              <PriorityCard key={p.id} p={p} onToggle={() => onToggle(p.id)} onRemove={() => onRemove(p.id)} onEdit={() => onEdit(p)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Daily View ────────────────────────────────────────────────────────────────
+function DailyView({
+  date, priorities, onToggle, onRemove, onEdit
+}: { date: Date; priorities: Priority[]; onToggle: (id: string) => void; onRemove: (id: string) => void; onEdit: (p: Priority) => void }) {
+  const items = priorities.filter(p => p.date && isSameDay(parseISO(p.date), date))
+  const unscheduled = priorities.filter(p => !p.date)
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 capitalize">
+          {format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        </p>
+        <div className="space-y-2">
+          {items.map(p => (
+            <PriorityCard key={p.id} p={p} onToggle={() => onToggle(p.id)} onRemove={() => onRemove(p.id)} onEdit={() => onEdit(p)} />
+          ))}
+          {items.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">Nenhuma prioridade para este dia</p>}
+        </div>
+      </div>
+      {unscheduled.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Sem data</p>
+          <div className="space-y-2">
+            {unscheduled.map(p => (
+              <PriorityCard key={p.id} p={p} onToggle={() => onToggle(p.id)} onRemove={() => onRemove(p.id)} onEdit={() => onEdit(p)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Theme Summary ─────────────────────────────────────────────────────────────
+function ThemeSummary({ priorities }: { priorities: Priority[] }) {
+  const pending = priorities.filter(p => !p.done)
+  const withTema = pending.filter(p => p.tema)
+  const allTemas = Array.from(new Set(withTema.map(p => p.tema!)))
+
+  if (allTemas.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+        <Clock size={10} /> Distribuição de temas
+      </p>
+      <div className="space-y-2">
+        {allTemas.map(tema => {
+          const count = withTema.filter(p => p.tema === tema).length
+          const pct = Math.round((count / withTema.length) * 100)
+          const color = getTemaColor(tema, allTemas)
+          return (
+            <div key={tema}>
+              <div className="flex justify-between text-[10px] mb-0.5">
+                <span className="font-medium text-gray-700">{tema}</span>
+                <span className="text-gray-400">{pct}%</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Deleted History ───────────────────────────────────────────────────────────
+function DeletedHistory({ deleted, onRestore }: { deleted: Priority[]; onRestore: (p: Priority) => void }) {
+  const [open, setOpen] = useState(false)
+  if (deleted.length === 0) return null
+
+  const monthOld = deleted.filter(p => {
+    if (!p.deleted_at) return false
+    const diff = Date.now() - new Date(p.deleted_at).getTime()
+    return diff > 30 * 24 * 60 * 60 * 1000
+  })
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+          <Trash2 size={12} /> {deleted.length} excluída(s)
+          {monthOld.length > 0 && (
+            <span className="bg-amber-100 text-amber-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+              {monthOld.length} com +30 dias
+            </span>
+          )}
+        </span>
+        {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-2">
+          {monthOld.length > 0 && (
+            <p className="text-[10px] text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+              💡 {monthOld.length} prioridade(s) com mais de 30 dias excluídas. Considere limpá-las.
+            </p>
+          )}
+          {deleted.map(p => (
+            <div key={p.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500 line-through truncate">{p.title}</p>
+                <p className="text-[9px] text-gray-300">{p.deleted_at ? format(parseISO(p.deleted_at), 'dd/MM/yyyy') : ''}</p>
+              </div>
+              <button onClick={() => onRestore(p)} className="text-[10px] text-[#1B4332] font-medium flex items-center gap-1 hover:opacity-80">
+                <RotateCcw size={10} /> Restaurar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main HomePage ─────────────────────────────────────────────────────────────
 export function HomePage() {
   const { user } = useAuth()
   const [priorities, setPriorities] = usePriorities()
+  const [deletedPriorities, setDeletedPriorities] = useDeletedPriorities()
   const [meetings] = useMeetings()
-  const [showAdd, setShowAdd] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  const [newOwner, setNewOwner] = useState<Owner>('todos')
-  const [newUrgent, setNewUrgent] = useState(false)
-  const [search, setSearch] = useState('')
+
+  // View state
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+  const [calView, setCalView] = useState<'day' | 'week' | 'month'>('week')
+  const [baseDate, setBaseDate] = useState(new Date())
+  const [privateMode, setPrivateMode] = useState(false)
   const [filterOwner, setFilterOwner] = useState<Owner | 'all'>('all')
-  const [startDate, setStartDate] = useState<Date | null>(null)
-  const [endDate, setEndDate] = useState<Date | null>(null)
+  const [search, setSearch] = useState('')
+  const [showDoneCollapsed, setShowDoneCollapsed] = useState(true)
+  const [showDeletedCollapsed, setShowDeletedCollapsed] = useState(true)
 
-  const handleDateChange = (s: Date | null, e: Date | null) => {
-    setStartDate(s); setEndDate(e)
-  }
+  // Form state
+  const [showAdd, setShowAdd] = useState(false)
+  const [editingPriority, setEditingPriority] = useState<Priority | null>(null)
 
-  const filterByDate = (dateStr: string) => {
-    if (!startDate) return true
-    const d = parseISO(dateStr)
-    if (endDate) return isWithinInterval(d, { start: startOfDay(startDate), end: endOfDay(endDate) })
-    return isToday(d) || format(d, 'yyyy-MM-dd') === format(startDate, 'yyyy-MM-dd')
-  }
+  // Drag state
+  const dragItem = useRef<Priority | null>(null)
+  const [dragConfirm, setDragConfirm] = useState<{ priority: Priority; toDate: Date } | null>(null)
 
-  const filtered = priorities.filter(p => {
-    if (!filterByDate(p.created_at)) return false
+  // ── Filtering ────────────────────────────────────────────────────────────
+  const visiblePriorities = priorities.filter(p => {
+    if (p.private && p.privateOwner !== user?.email) return false
+    if (privateMode && !p.private) return false
     if (filterOwner !== 'all' && p.owner !== filterOwner) return false
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  const upcoming = meetings
-    .filter(m => new Date(m.date) >= new Date())
-    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 3)
+  const pending = visiblePriorities.filter(p => !p.done)
+  const done = visiblePriorities.filter(p => p.done)
 
-  const toggleDone = (id: string) => setPriorities(prev => prev.map(p => p.id === id ? { ...p, done: !p.done } : p))
-  const remove = (id: string) => setPriorities(prev => prev.filter(p => p.id !== id))
-
-  const addPriority = () => {
-    if (!newTitle.trim()) return
-    setPriorities(prev => [...prev, {
-      id: Date.now().toString(), title: newTitle.trim(), owner: newOwner,
-      urgent: newUrgent, done: false, created_at: new Date().toISOString()
-    }])
-    setNewTitle(''); setNewOwner('todos'); setNewUrgent(false); setShowAdd(false)
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const goPrev = () => {
+    if (calView === 'day') setBaseDate(d => addDays(d, -1))
+    else if (calView === 'week') setBaseDate(d => subWeeks(d, 1))
+    else setBaseDate(d => subMonths(d, 1))
+  }
+  const goNext = () => {
+    if (calView === 'day') setBaseDate(d => addDays(d, 1))
+    else if (calView === 'week') setBaseDate(d => addWeeks(d, 1))
+    else setBaseDate(d => addMonths(d, 1))
   }
 
-  const pending = filtered.filter(p => !p.done)
-  const done = filtered.filter(p => p.done)
+  const navLabel = () => {
+    if (calView === 'day') return format(baseDate, "EEEE, dd 'de' MMMM", { locale: ptBR })
+    if (calView === 'week') {
+      const start = startOfWeek(baseDate, { weekStartsOn: 0 })
+      const end = endOfWeek(baseDate, { weekStartsOn: 0 })
+      return `${format(start, 'dd MMM', { locale: ptBR })} – ${format(end, 'dd MMM yyyy', { locale: ptBR })}`
+    }
+    return format(baseDate, 'MMMM yyyy', { locale: ptBR })
+  }
 
-  // Highlight dates that have priorities
-  const highlightDates = priorities.map(p => parseISO(p.created_at))
+  // Week columns
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(baseDate, { weekStartsOn: 0 }), i))
+  const itemsForDay = (d: Date) => visiblePriorities.filter(p => p.date && isSameDay(parseISO(p.date), d))
+  const unscheduled = pending.filter(p => !p.date)
+
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  const addPriority = (fields: Partial<Priority>) => {
+    setPriorities(prev => [...prev, {
+      id: Date.now().toString(),
+      title: fields.title!,
+      owner: fields.owner ?? 'todos',
+      urgent: fields.urgent ?? false,
+      important: fields.important ?? false,
+      done: false,
+      private: fields.private ?? false,
+      privateOwner: fields.privateOwner,
+      tema: fields.tema,
+      description: fields.description,
+      date: fields.date,
+      created_at: new Date().toISOString(),
+    }])
+    setShowAdd(false)
+  }
+
+  const updatePriority = (id: string, fields: Partial<Priority>) => {
+    setPriorities(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p))
+    setEditingPriority(null)
+  }
+
+  const toggleDone = (id: string) => setPriorities(prev => prev.map(p => p.id === id ? { ...p, done: !p.done } : p))
+
+  const removePriority = (id: string) => {
+    const p = priorities.find(x => x.id === id)
+    if (p) setDeletedPriorities(prev => [...prev, { ...p, deleted_at: new Date().toISOString() }])
+    setPriorities(prev => prev.filter(p => p.id !== id))
+  }
+
+  const restorePriority = (p: Priority) => {
+    const { deleted_at: _, ...rest } = p as Priority & { deleted_at?: string }
+    setPriorities(prev => [...prev, { ...rest, done: false }])
+    setDeletedPriorities(prev => prev.filter(x => x.id !== p.id))
+  }
+
+  // ── Drag & Drop ───────────────────────────────────────────────────────────
+  const handleDragStart = (p: Priority) => { dragItem.current = p }
+  const handleDrop = (toDate: Date) => {
+    if (!dragItem.current) return
+    setDragConfirm({ priority: dragItem.current, toDate })
+    dragItem.current = null
+  }
+  const confirmDrag = () => {
+    if (!dragConfirm) return
+    updatePriority(dragConfirm.priority.id, { date: format(dragConfirm.toDate, 'yyyy-MM-dd') })
+    setDragConfirm(null)
+  }
+
+  const upcoming = meetings
+    .filter(m => new Date(m.date) >= new Date())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 3)
+
 
   return (
-    <div className="flex gap-6">
-      {/* ── LEFT: main content ── */}
-      <div className="flex-1 min-w-0 space-y-5">
-        {/* Greeting */}
+    <div className="space-y-5">
+      {/* ── Greeting ── */}
+      <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Olá, {user?.name} 👋</h2>
-          <p className="text-sm text-gray-500">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
+          <p className="text-sm text-gray-500 capitalize">{format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}</p>
+        </div>
+        <button
+          onClick={() => setPrivateMode(m => !m)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border font-medium transition-colors ${privateMode ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-500 hover:border-purple-300'}`}
+          title="Modo particular: mostra apenas suas anotações privadas"
+        >
+          {privateMode ? <Lock size={12} /> : <Unlock size={12} />}
+          {privateMode ? 'Particular' : 'Compartilhado'}
+        </button>
+      </div>
+
+      {/* ── Upcoming meetings ── */}
+      {upcoming.length > 0 && (
+        <section>
+          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Calendar size={12} /> Próximas reuniões
+          </h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {upcoming.map(m => (
+              <div key={m.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{m.title}</p>
+                  <p className="text-xs text-gray-500">{formatMeetingDate(m.date)}</p>
+                </div>
+                <div className="flex gap-1">
+                  {m.participants.map(p => (
+                    <span key={p} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OWNER_COLORS[p]}`}>{p}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Priorities section ── */}
+      <section className="space-y-3">
+        {/* Sub-header: title + List/Kanban toggle */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+            <AlertCircle size={12} /> Prioridades
+            <span className="font-normal">({pending.length} pendentes)</span>
+          </h3>
+          <div className="flex items-center gap-2">
+            {/* List/Kanban toggle */}
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                <Kanban size={12} /> Kanban
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                <List size={12} /> Lista
+              </button>
+            </div>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1 bg-[#1B4332] text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:opacity-90"
+            >
+              <Plus size={12} /> Adicionar
+            </button>
+          </div>
         </div>
 
-        {/* Search + owner filter */}
-        <div className="flex gap-2 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <SearchBar value={search} onChange={setSearch} placeholder="Buscar prioridade..." />
-          </div>
-          <div className="flex gap-1.5">
-            {(['all','A','E','G'] as const).map(o => (
+        {/* Filters row */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar prioridade..."
+            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#1B4332] flex-1 min-w-[150px]"
+          />
+          <div className="flex gap-1">
+            {(['all','A','E','G','D'] as const).map(o => (
               <button key={o} onClick={() => setFilterOwner(o)}
-                className={`text-xs px-3 py-2 rounded-xl font-medium border transition-colors ${
-                  filterOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white hover:border-[#1B4332]/30'
-                }`}>
+                className={`text-[10px] px-2.5 py-1.5 rounded-lg font-medium border transition-colors ${filterOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600 bg-white hover:border-[#1B4332]/30'}`}>
                 {o === 'all' ? 'Todos' : o}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Upcoming meetings */}
-        {upcoming.length > 0 && (
-          <section>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Calendar size={12} /> Próximas reuniões
-            </h3>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {upcoming.map(m => (
-                <div key={m.id} className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                    <p className="text-xs text-gray-500">{formatMeetingDate(m.date)}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    {m.participants.map(p => (
-                      <span key={p} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OWNER_COLORS[p]}`}>{p}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+        {/* Add Form */}
+        {showAdd && (
+          <PriorityForm
+            onSave={addPriority}
+            onCancel={() => setShowAdd(false)}
+            currentUser={user?.email ?? ''}
+            privateMode={privateMode}
+          />
         )}
 
-        {/* Priorities */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertCircle size={12} /> Prioridades {filtered.length > 0 && <span className="font-normal">({pending.length} pendentes)</span>}
-            </h3>
-            <button onClick={() => setShowAdd(true)} className="text-[#1B4332] flex items-center gap-1 text-xs font-medium hover:opacity-80">
-              <Plus size={14} /> Adicionar
-            </button>
+        {/* Edit Form (modal-like inline) */}
+        {editingPriority && (
+          <div className="fixed inset-0 bg-black/30 flex items-start justify-center z-50 p-4 pt-20">
+            <div className="w-full max-w-md">
+              <PriorityForm
+                initial={editingPriority}
+                onSave={fields => updatePriority(editingPriority.id, fields)}
+                onCancel={() => setEditingPriority(null)}
+                currentUser={user?.email ?? ''}
+                privateMode={privateMode}
+              />
+            </div>
           </div>
+        )}
 
-          {showAdd && (
-            <div className="bg-white rounded-xl border border-[#1B4332]/20 p-4 mb-3 space-y-3">
-              <input autoFocus value={newTitle} onChange={e => setNewTitle(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addPriority()}
-                placeholder="Nova prioridade..."
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1B4332]" />
-              <div className="flex gap-2 flex-wrap">
-                {(['A','E','G','todos'] as Owner[]).map(o => (
-                  <button key={o} onClick={() => setNewOwner(o)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${newOwner === o ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
-                    {OWNER_LABELS[o]}
+        {/* ── KANBAN VIEW ── */}
+        {viewMode === 'kanban' && (
+          <div className="space-y-4">
+            {/* Cal view controls */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex bg-gray-100 rounded-lg p-0.5">
+                {(['day','week','month'] as const).map(v => (
+                  <button key={v} onClick={() => setCalView(v)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${calView === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                    {v === 'day' ? 'Diário' : v === 'week' ? 'Semanal' : 'Mensal'}
                   </button>
                 ))}
-                <button onClick={() => setNewUrgent(!newUrgent)}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${newUrgent ? 'bg-red-500 text-white border-red-500' : 'border-gray-200 text-gray-600'}`}>
-                  🔴 Urgente
-                </button>
               </div>
-              <div className="flex gap-2">
-                <button onClick={addPriority} className="flex-1 bg-[#1B4332] text-white rounded-lg py-2 text-sm font-medium">Salvar</button>
-                <button onClick={() => setShowAdd(false)} className="px-4 border border-gray-200 rounded-lg text-sm text-gray-500">Cancelar</button>
+              <div className="flex items-center gap-1">
+                <button onClick={goPrev} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronLeft size={14} /></button>
+                <button onClick={() => setBaseDate(new Date())} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 font-medium text-gray-600 hover:border-[#1B4332]/30">Hoje</button>
+                <button onClick={goNext} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronRight size={14} /></button>
+              </div>
+              <p className="text-sm font-semibold text-gray-700 capitalize flex-1">{navLabel()}</p>
+            </div>
+
+            {/* Main kanban area + right sidebar */}
+            <div className="flex gap-4">
+              {/* Left: kanban + bottom theme summary */}
+              <div className="flex-1 min-w-0 space-y-4">
+                {calView === 'week' && (
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {weekDays.map(d => (
+                      <KanbanColumn
+                        key={d.toISOString()}
+                        date={d}
+                        items={itemsForDay(d)}
+                        isToday={isToday(d)}
+                        onDrop={handleDrop}
+                        onToggle={toggleDone}
+                        onRemove={removePriority}
+                        onEdit={setEditingPriority}
+                        onDragStart={handleDragStart}
+                      />
+                    ))}
+                  </div>
+                )}
+                {calView === 'day' && (
+                  <DailyView
+                    date={baseDate}
+                    priorities={visiblePriorities}
+                    onToggle={toggleDone}
+                    onRemove={removePriority}
+                    onEdit={setEditingPriority}
+                  />
+                )}
+                {calView === 'month' && (
+                  <MonthlyGrid
+                    baseDate={baseDate}
+                    priorities={visiblePriorities}
+                    onToggle={toggleDone}
+                    onRemove={removePriority}
+                    onEdit={setEditingPriority}
+                  />
+                )}
+
+                {/* Unscheduled (week/month views) */}
+                {(calView === 'week' || calView === 'month') && unscheduled.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Sem data agendada ({unscheduled.length})</p>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {unscheduled.map(p => (
+                        <PriorityCard
+                          key={p.id} p={p}
+                          onToggle={() => toggleDone(p.id)}
+                          onRemove={() => removePriority(p.id)}
+                          onEdit={() => setEditingPriority(p)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Theme summary - bottom left */}
+                <ThemeSummary priorities={visiblePriorities} />
+              </div>
+
+              {/* Right: mini calendar */}
+              <div className="hidden lg:block">
+                <MiniCalendarPanel currentDate={baseDate} onSelectDate={setBaseDate} />
               </div>
             </div>
-          )}
-
-          <div className="space-y-2">
-            {pending.map(p => (
-              <div key={p.id} className={`bg-white rounded-xl border px-4 py-3 flex items-start gap-3 ${p.urgent ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`}>
-                <button onClick={() => toggleDone(p.id)} className="mt-0.5 flex-shrink-0"><Circle size={18} className="text-gray-300" /></button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900 leading-snug">{p.title}</p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    {p.urgent && <span className="text-[10px] text-red-600 font-bold">🔴 URGENTE</span>}
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OWNER_COLORS[p.owner]}`}>{OWNER_LABELS[p.owner]}</span>
-                  </div>
-                </div>
-                <button onClick={() => remove(p.id)} className="text-gray-300 hover:text-gray-500 flex-shrink-0"><X size={14} /></button>
-              </div>
-            ))}
-            {pending.length === 0 && !showAdd && (
-              <p className="text-sm text-gray-400 text-center py-6">Nenhuma prioridade{search ? ' encontrada' : ' pendente'}</p>
-            )}
           </div>
+        )}
 
-          {done.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs text-gray-400 mb-2">{done.length} concluída(s)</p>
-              <div className="space-y-1.5 opacity-50">
-                {done.map(p => (
-                  <div key={p.id} className="bg-white rounded-xl border border-gray-100 px-4 py-2.5 flex items-center gap-3">
-                    <button onClick={() => toggleDone(p.id)}><CheckCircle2 size={18} className="text-[#1B4332]" /></button>
-                    <p className="text-sm text-gray-500 line-through">{p.title}</p>
-                  </div>
-                ))}
-              </div>
+        {/* ── LIST VIEW ── */}
+        {viewMode === 'list' && (
+          <div className="flex gap-4">
+            <div className="flex-1 min-w-0 space-y-2">
+              {pending.map(p => (
+                <PriorityCard
+                  key={p.id} p={p}
+                  onToggle={() => toggleDone(p.id)}
+                  onRemove={() => removePriority(p.id)}
+                  onEdit={() => setEditingPriority(p)}
+                />
+              ))}
+              {pending.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">Nenhuma prioridade pendente</p>
+              )}
+
+              {/* Completed (collapsed by default) */}
+              {done.length > 0 && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setShowDoneCollapsed(c => !c)}
+                    className="flex items-center gap-2 text-xs text-gray-400 font-medium w-full text-left py-1"
+                  >
+                    {showDoneCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                    {done.length} concluída(s)
+                  </button>
+                  {!showDoneCollapsed && (
+                    <div className="space-y-1.5 mt-2 opacity-50">
+                      {done.map(p => (
+                        <PriorityCard
+                          key={p.id} p={p}
+                          onToggle={() => toggleDone(p.id)}
+                          onRemove={() => removePriority(p.id)}
+                          onEdit={() => setEditingPriority(p)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Theme summary */}
+              <ThemeSummary priorities={visiblePriorities} />
+            </div>
+            <div className="hidden lg:block">
+              <MiniCalendarPanel currentDate={baseDate} onSelectDate={setBaseDate} />
+            </div>
+          </div>
+        )}
+
+        {/* ── Deleted history ── */}
+        <div>
+          <button
+            onClick={() => setShowDeletedCollapsed(c => !c)}
+            className="flex items-center gap-2 text-xs text-gray-400 font-medium w-full text-left py-1"
+          >
+            {showDeletedCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            Histórico de excluídas ({deletedPriorities.length})
+          </button>
+          {!showDeletedCollapsed && (
+            <DeletedHistory deleted={deletedPriorities} onRestore={restorePriority} />
+          )}
+        </div>
+      </section>
+
+      {/* ── Completed history (always collapsed) ── */}
+      {done.length > 0 && viewMode === 'kanban' && (
+        <section>
+          <button
+            onClick={() => setShowDoneCollapsed(c => !c)}
+            className="flex items-center gap-2 text-xs text-gray-400 font-medium"
+          >
+            {showDoneCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            {done.length} prioridade(s) concluída(s)
+          </button>
+          {!showDoneCollapsed && (
+            <div className="mt-2 grid sm:grid-cols-2 lg:grid-cols-3 gap-2 opacity-50">
+              {done.map(p => (
+                <PriorityCard
+                  key={p.id} p={p}
+                  onToggle={() => toggleDone(p.id)}
+                  onRemove={() => removePriority(p.id)}
+                  onEdit={() => setEditingPriority(p)}
+                />
+              ))}
             </div>
           )}
         </section>
-      </div>
+      )}
 
-      {/* ── RIGHT: calendar panel (desktop only) ── */}
-      <RightPanel
-        startDate={startDate}
-        endDate={endDate}
-        onDateChange={handleDateChange}
-        highlightDates={highlightDates}
-      />
+      {/* ── Drag confirm popup ── */}
+      {dragConfirm && (
+        <DragConfirmPopup
+          priority={dragConfirm.priority}
+          toDate={dragConfirm.toDate}
+          onConfirm={confirmDrag}
+          onCancel={() => setDragConfirm(null)}
+        />
+      )}
     </div>
   )
 }

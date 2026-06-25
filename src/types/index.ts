@@ -1,4 +1,4 @@
-export type Owner = 'A' | 'E' | 'G' | 'todos'
+export type Owner = 'A' | 'E' | 'G' | 'D' | 'todos'
 
 export interface Task {
   id: string
@@ -10,6 +10,7 @@ export interface Task {
   area: 'produto' | 'comercial' | 'juridico' | 'financeiro' | 'geral'
   notes?: string
   created_at: string
+  deleted_at?: string
 }
 
 export interface Client {
@@ -44,6 +45,25 @@ export interface Priority {
   title: string
   owner: Owner
   urgent: boolean
+  important: boolean
   done: boolean
+  private: boolean
+  privateOwner?: string
+  tema?: string
+  description?: string
+  date?: string
   created_at: string
+  deleted_at?: string
+}
+
+export interface UserPermissions {
+  email: string
+  name: string
+  initials: string
+  color: string
+  role: 'admin' | 'editor' | 'viewer'
+  active: boolean
+  canManageUsers: boolean
+  canDeleteData: boolean
+  canAccessSettings: boolean
 }

@@ -9,7 +9,8 @@ import { RightPanel } from '../components/RightPanel'
 
 const OWNER_COLORS: Record<Owner, string> = {
   A: 'bg-blue-100 text-blue-700', E: 'bg-purple-100 text-purple-700',
-  G: 'bg-orange-100 text-orange-700', todos: 'bg-gray-100 text-gray-600',
+  G: 'bg-orange-100 text-orange-700', D: 'bg-pink-100 text-pink-700',
+  todos: 'bg-gray-100 text-gray-600',
 }
 
 export function AgendaPage() {
