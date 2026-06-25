@@ -1,1 +1,8 @@
-{"error":{"code":"api_version_disabled","message":"v6 of this endpoint has been disabled. Please use v8 instead.","fid":"ade87bd3232d83676f02ca7ac5764271694351a8"}}
+// Auth via Supabase será ativado em fase futura.
+// Autenticação atual usa hooks/useAuth.ts com localStorage.
+
+export const ALLOWED_EMAILS = [
+  'andre.galhano@grupogranular.com.br',
+  'eduardo.lage@grupogranular.com.br',
+  'gabriel.rocha@grupogranular.com.br',
+]

@@ -1,1 +1,3 @@
-{"error":{"code":"api_version_disabled","message":"v6 of this endpoint has been disabled. Please use v8 instead.","fid":"56b2d4265e7525b5fd45aac30530cdd234d0fbc5"}}
+// Supabase será configurado em uma próxima fase.
+// Por enquanto, auth usa localStorage (ver hooks/useAuth.ts).
+export const supabase = null
