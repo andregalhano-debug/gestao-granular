@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, CheckSquare, Users, Calendar, FolderOpen, LogOut, Menu, X, Settings, ChevronLeft, ChevronRight, BarChart2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useState } from 'react'
 
@@ -7,6 +7,7 @@ const nav = [
   { to: '/', icon: Home, label: 'Home', desc: 'Prioridades e agenda' },
   { to: '/tarefas', icon: CheckSquare, label: 'Tarefas', desc: 'Checklist da equipe' },
   { to: '/clientes', icon: Users, label: 'Clientes', desc: 'Pipeline comercial' },
+  { to: '/dashboard', icon: BarChart2, label: 'Dashboard', desc: 'Receita e CRM' },
   { to: '/agenda', icon: Calendar, label: 'Agenda', desc: 'Reuniões e eventos' },
   { to: '/docs', icon: FolderOpen, label: 'Docs', desc: 'Links e documentos' },
   { to: '/settings', icon: Settings, label: 'Configurações', desc: 'Usuários e permissões' },
@@ -16,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/': 'Home',
   '/tarefas': 'Tarefas',
   '/clientes': 'Clientes',
+  '/dashboard': 'Dashboard',
   '/agenda': 'Agenda',
   '/docs': 'Docs & Links',
   '/settings': 'Configurações',

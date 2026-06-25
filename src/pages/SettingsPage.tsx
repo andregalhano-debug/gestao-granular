@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import { Settings, Users, Shield, Edit2, Check, Lock, Eye, Trash2 } from 'lucide-react'
+import { Settings, Users, Shield, Edit2, Check, Lock, Trash2, FileText } from 'lucide-react'
 import { useAuth, ALL_USERS } from '../hooks/useAuth'
+import { useChangeLog } from '../hooks/useLocalData'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 type Role = 'admin' | 'editor' | 'viewer'
+type ActiveTab = 'users' | 'security' | 'log'
 
 interface UserConfig {
   email: string
@@ -40,6 +44,12 @@ const OWNER_COLORS: Record<string, string> = {
   D: 'bg-pink-100 text-pink-700',
 }
 
+const LOG_ACTION_COLOR: Record<string, string> = {
+  create: 'bg-green-100 text-green-700',
+  update: 'bg-blue-100 text-blue-700',
+  delete: 'bg-red-100 text-red-700',
+}
+
 function initConfigs(): UserConfig[] {
   try {
     const stored = localStorage.getItem('gg_user_configs')
@@ -61,12 +71,114 @@ function saveConfigs(configs: UserConfig[]) {
   localStorage.setItem('gg_user_configs', JSON.stringify(configs))
 }
 
+// ─────────────────────────────────────────────
+// Inline EyeOff
+// ─────────────────────────────────────────────
+function EyeOff({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Password change inline form
+// ─────────────────────────────────────────────
+function PasswordSection({ userEmail }: { userEmail: string }) {
+  const [showForm, setShowForm] = useState(false)
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!currentPw) { setError('Digite a senha atual.'); return }
+    if (newPw.length < 6) { setError('A nova senha deve ter ao menos 6 caracteres.'); return }
+    if (newPw !== confirmPw) { setError('As senhas não coincidem.'); return }
+
+    // Verify current password
+    const stored = (() => {
+      try { return JSON.parse(localStorage.getItem('gg_passwords') ?? '{}') } catch { return {} }
+    })() as Record<string, string>
+    // Also check against static password if no override exists
+    const STATIC_PW = 'granular2026'
+    const currentStored = stored[userEmail]
+    const expectedPw = currentStored ?? STATIC_PW
+    if (currentPw !== expectedPw) { setError('Senha atual incorreta.'); return }
+
+    stored[userEmail] = newPw
+    localStorage.setItem('gg_passwords', JSON.stringify(stored))
+    setSuccess(true)
+    setCurrentPw(''); setNewPw(''); setConfirmPw('')
+    setTimeout(() => { setSuccess(false); setShowForm(false) }, 2000)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <Lock size={16} className="text-[#1B4332]" /> Senha
+        </div>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-[#1B4332]/30 hover:text-[#1B4332] transition-colors">
+            Alterar senha
+          </button>
+        )}
+      </div>
+
+      {!showForm ? (
+        <p className="text-sm text-gray-500">Senha atual: <span className="font-mono tracking-widest text-gray-700">••••••••</span></p>
+      ) : (
+        <form onSubmit={handleSave} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Senha atual</label>
+            <input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} autoFocus
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332]/50" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Nova senha</label>
+            <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332]/50" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Confirmar nova senha</label>
+            <input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332]/50" />
+          </div>
+          {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          {success && <p className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-1.5"><Check size={12} /> Senha alterada com sucesso!</p>}
+          <div className="flex gap-2">
+            <button type="submit" className="flex items-center gap-1.5 bg-[#1B4332] text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+              <Check size={13} /> Salvar
+            </button>
+            <button type="button" onClick={() => { setShowForm(false); setError(''); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}
+              className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-500">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────
 export function SettingsPage() {
   const { user } = useAuth()
+  const [log] = useChangeLog()
   const [configs, setConfigs] = useState<UserConfig[]>(initConfigs)
   const [editingEmail, setEditingEmail] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<UserConfig>>({})
-  const [activeTab, setActiveTab] = useState<'users' | 'security'>('users')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('users')
   const [saved, setSaved] = useState(false)
 
   const isAdmin = user?.role === 'admin'
@@ -108,6 +220,8 @@ export function SettingsPage() {
     )
   }
 
+  const sortedLog = [...log].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
   return (
     <div className="max-w-3xl space-y-6">
       {/* Header */}
@@ -130,27 +244,27 @@ export function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-        >
+        <button onClick={() => setActiveTab('users')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
           <Users size={14} /> Usuários
         </button>
-        <button
-          onClick={() => setActiveTab('security')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-        >
+        <button onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
           <Shield size={14} /> Segurança
+        </button>
+        <button onClick={() => setActiveTab('log')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'log' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          <FileText size={14} /> Log de alterações
         </button>
       </div>
 
+      {/* ── USERS TAB ──────────────────────────── */}
       {activeTab === 'users' && (
         <div className="space-y-3">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Usuários do sistema ({configs.length})</p>
           {configs.map(cfg => (
             <div key={cfg.email} className={`bg-white rounded-xl border p-4 transition-all ${!cfg.active ? 'opacity-50 border-gray-100' : 'border-gray-100 hover:border-gray-200'}`}>
               {editingEmail === cfg.email ? (
-                /* Edit mode */
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${OWNER_COLORS[cfg.initials] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -162,16 +276,12 @@ export function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Role selector */}
                   <div>
                     <p className="text-[10px] font-medium text-gray-500 uppercase mb-1.5">Função</p>
                     <div className="flex gap-2 flex-wrap">
                       {(['admin', 'editor', 'viewer'] as Role[]).map(r => (
-                        <button
-                          key={r}
-                          onClick={() => setEditForm(f => ({ ...f, role: r, canManageUsers: r === 'admin', canDeleteData: r === 'admin', canAccessSettings: r === 'admin' }))}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${editForm.role === r ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}
-                        >
+                        <button key={r} onClick={() => setEditForm(f => ({ ...f, role: r, canManageUsers: r === 'admin', canDeleteData: r === 'admin', canAccessSettings: r === 'admin' }))}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${editForm.role === r ? 'bg-[#1B4332] text-white border-[#1B4332]' : 'border-gray-200 text-gray-600'}`}>
                           {ROLE_LABELS[r]}
                         </button>
                       ))}
@@ -179,7 +289,6 @@ export function SettingsPage() {
                     {editForm.role && <p className="text-[10px] text-gray-400 mt-1">{ROLE_DESC[editForm.role as Role]}</p>}
                   </div>
 
-                  {/* Permissions */}
                   <div>
                     <p className="text-[10px] font-medium text-gray-500 uppercase mb-1.5">Permissões específicas</p>
                     <div className="space-y-1.5">
@@ -189,12 +298,9 @@ export function SettingsPage() {
                         { key: 'canAccessSettings', label: 'Acessar configurações' },
                       ].map(({ key, label }) => (
                         <label key={key} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!(editForm as Record<string, unknown>)[key]}
+                          <input type="checkbox" checked={!!(editForm as Record<string, unknown>)[key]}
                             onChange={e => setEditForm(f => ({ ...f, [key]: e.target.checked }))}
-                            className="rounded"
-                          />
+                            className="rounded accent-[#1B4332]" />
                           <span className="text-sm text-gray-700">{label}</span>
                         </label>
                       ))}
@@ -205,19 +311,16 @@ export function SettingsPage() {
                     <button onClick={saveEdit} className="flex items-center gap-1.5 bg-[#1B4332] text-white px-4 py-1.5 rounded-lg text-sm font-medium">
                       <Check size={13} /> Salvar
                     </button>
-                    <button onClick={cancelEdit} className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-500">
-                      Cancelar
-                    </button>
+                    <button onClick={cancelEdit} className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-500">Cancelar</button>
                   </div>
                 </div>
               ) : (
-                /* View mode */
                 <div className="flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${OWNER_COLORS[cfg.initials] ?? 'bg-gray-100 text-gray-600'}`}>
                     {cfg.initials}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">{cfg.name}</p>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ROLE_COLOR[cfg.role]}`}>{ROLE_LABELS[cfg.role]}</span>
                       {!cfg.active && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">Inativo</span>}
@@ -232,18 +335,18 @@ export function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     {cfg.email !== user?.email && (
-                      <button
-                        onClick={() => toggleActive(cfg.email)}
+                      <button onClick={() => toggleActive(cfg.email)}
                         className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-300 transition-colors"
-                        title={cfg.active ? 'Desativar' : 'Ativar'}
-                      >
-                        {cfg.active ? <Eye size={13} /> : <EyeOff size={13} />}
+                        title={cfg.active ? 'Desativar' : 'Ativar'}>
+                        {cfg.active ? (
+                          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ) : (
+                          <EyeOff size={13} />
+                        )}
                       </button>
                     )}
-                    <button
-                      onClick={() => startEdit(cfg)}
-                      className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1B4332]/30 hover:text-[#1B4332] transition-colors flex items-center gap-1"
-                    >
+                    <button onClick={() => startEdit(cfg)}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1B4332]/30 hover:text-[#1B4332] transition-colors flex items-center gap-1">
                       <Edit2 size={12} /> Editar
                     </button>
                   </div>
@@ -254,6 +357,7 @@ export function SettingsPage() {
         </div>
       )}
 
+      {/* ── SECURITY TAB ──────────────────────────── */}
       {activeTab === 'security' && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
@@ -265,7 +369,7 @@ export function SettingsPage() {
                 <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-blue-800">Modo Particular</p>
-                  <p className="text-xs text-blue-600 mt-0.5">Itens marcados como privados são visíveis somente para o usuário que os criou. Os demais membros não veem essas anotações.</p>
+                  <p className="text-xs text-blue-600 mt-0.5">Itens marcados como privados são visíveis somente para o usuário que os criou.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
@@ -279,32 +383,58 @@ export function SettingsPage() {
                 <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-green-800">Dados</p>
-                  <p className="text-xs text-green-600 mt-0.5">Informações armazenadas localmente no navegador. Histórico de exclusões mantido por 30 dias para recuperação.</p>
+                  <p className="text-xs text-green-600 mt-0.5">Informações armazenadas localmente no navegador. Histórico de exclusões mantido para recuperação.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
-              <Lock size={16} className="text-[#1B4332]" /> Senhas
-            </div>
-            <p className="text-sm text-gray-500">Senha padrão atual: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">granular2026</code></p>
-            <p className="text-xs text-gray-400 mt-1">Para alterar senhas individuais, contate o administrador do sistema.</p>
+          <PasswordSection userEmail={user?.email ?? ''} />
+        </div>
+      )}
+
+      {/* ── LOG TAB ──────────────────────────── */}
+      {activeTab === 'log' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Log de alterações ({sortedLog.length})</p>
+            {sortedLog.length > 0 && (
+              <span className="text-[10px] text-gray-400">Últimas {Math.min(sortedLog.length, 200)} entradas</span>
+            )}
           </div>
+
+          {sortedLog.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
+              <FileText size={32} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-sm text-gray-400">Nenhuma alteração registrada</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sortedLog.map(entry => (
+                <div key={entry.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${LOG_ACTION_COLOR[entry.action] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {entry.action === 'create' ? 'Criou' : entry.action === 'update' ? 'Editou' : entry.action === 'delete' ? 'Removeu' : entry.action}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 leading-snug">{entry.detail}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-gray-400 font-medium">{entry.user}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400 font-medium">{entry.entity}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400">
+                        {format(parseISO(entry.timestamp), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
-  )
-}
-
-// Inline EyeOff icon since it may not be in the version
-function EyeOff({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
   )
 }
