@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, X, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, X, ChevronRight, Search } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -149,6 +149,20 @@ function faseIndex(f: Fase) {
   return FASES.findIndex(x => x.id === f)
 }
 
+function filterAreas(areas: Area[], search: string, filterFase: Fase | 'all', filterPrioridade: Prioridade | 'all') {
+  const q = search.toLowerCase()
+  return areas.filter(a => {
+    const matchesSearch = !q ||
+      a.nome.toLowerCase().includes(q) ||
+      a.responsavel.toLowerCase().includes(q) ||
+      a.modulos.some(m => m.toLowerCase().includes(q)) ||
+      faseInfo(a.fase).label.toLowerCase().includes(q)
+    const matchesFase = filterFase === 'all' || a.fase === filterFase
+    const matchesPrioridade = filterPrioridade === 'all' || a.prioridade === filterPrioridade
+    return matchesSearch && matchesFase && matchesPrioridade
+  })
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ProgressBar({ value }: { value: number }) {
@@ -169,13 +183,23 @@ function PrioridadeDot({ p }: { p: Prioridade }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${colors[p]}`} />
 }
 
+function EmptyState({ label }: { label: string }) {
+  return <p className="text-sm text-gray-400 text-center py-8 col-span-full">{label}</p>
+}
+
 // ─── Tab: Visão Geral ─────────────────────────────────────────────────────────
 
-function TabVisaoGeral({ areas }: { areas: Area[] }) {
+function TabVisaoGeral({ areas, search, filterFase, filterPrioridade }: {
+  areas: Area[]
+  search: string
+  filterFase: Fase | 'all'
+  filterPrioridade: Prioridade | 'all'
+}) {
   const progMedio = Math.round(areas.reduce((s, a) => s + a.progresso, 0) / areas.length)
   const criticas = areas.filter(a => a.progresso < 50).length
   const concluidas = areas.filter(a => a.progresso > 85).length
   const feedbacksAbertos = FEEDBACKS_INIT.filter(f => f.status !== 'resolvido').length
+  const filtered = filterAreas(areas, search, filterFase, filterPrioridade)
 
   return (
     <div className="space-y-6">
@@ -219,22 +243,27 @@ function TabVisaoGeral({ areas }: { areas: Area[] }) {
 
       {/* Area cards grid */}
       <div>
-        <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Áreas</p>
+        <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">
+          Áreas {filtered.length !== areas.length && <span className="text-gray-400 font-normal normal-case">({filtered.length} de {areas.length})</span>}
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {areas.map(a => (
-            <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-4">
-              <div className="flex items-start justify-between mb-2">
-                <p className="font-bold text-gray-900 text-sm">{a.nome}</p>
-                <PrioridadeDot p={a.prioridade} />
+          {filtered.length === 0
+            ? <EmptyState label="Nenhuma área encontrada com esses filtros." />
+            : filtered.map(a => (
+              <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <p className="font-bold text-gray-900 text-sm">{a.nome}</p>
+                  <PrioridadeDot p={a.prioridade} />
+                </div>
+                <p className="text-xs text-gray-500 mb-2">{a.responsavel}</p>
+                <FaseBadge fase={a.fase} />
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="flex-1"><ProgressBar value={a.progresso} /></div>
+                  <span className="text-xs font-bold text-gray-600">{a.progresso}%</span>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mb-2">{a.responsavel}</p>
-              <FaseBadge fase={a.fase} />
-              <div className="mt-3 flex items-center gap-2">
-                <div className="flex-1"><ProgressBar value={a.progresso} /></div>
-                <span className="text-xs font-bold text-gray-600">{a.progresso}%</span>
-              </div>
-            </div>
-          ))}
+            ))
+          }
         </div>
       </div>
 
@@ -267,9 +296,16 @@ function TabVisaoGeral({ areas }: { areas: Area[] }) {
 
 // ─── Tab: Áreas ───────────────────────────────────────────────────────────────
 
-function TabAreas({ areas, setAreas }: { areas: Area[]; setAreas: React.Dispatch<React.SetStateAction<Area[]>> }) {
+function TabAreas({ areas, setAreas, search, filterFase, filterPrioridade }: {
+  areas: Area[]
+  setAreas: React.Dispatch<React.SetStateAction<Area[]>>
+  search: string
+  filterFase: Fase | 'all'
+  filterPrioridade: Prioridade | 'all'
+}) {
   const [editing, setEditing] = useState<string | null>(null)
   const [editVals, setEditVals] = useState<{ responsavel: string; notas: string }>({ responsavel: '', notas: '' })
+  const filtered = filterAreas(areas, search, filterFase, filterPrioridade)
 
   function startEdit(a: Area) {
     setEditing(a.id)
@@ -283,7 +319,8 @@ function TabAreas({ areas, setAreas }: { areas: Area[]; setAreas: React.Dispatch
 
   return (
     <div className="space-y-4">
-      {areas.map(a => (
+      {filtered.length === 0 && <EmptyState label="Nenhuma área encontrada com esses filtros." />}
+      {filtered.map(a => (
         <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-start justify-between mb-3">
             <div>
@@ -347,66 +384,82 @@ function TabAreas({ areas, setAreas }: { areas: Area[]; setAreas: React.Dispatch
 
 // ─── Tab: Cronograma ─────────────────────────────────────────────────────────
 
-function TabCronograma({ areas }: { areas: Area[] }) {
+function TabCronograma({ areas, search, filterPrioridade }: {
+  areas: Area[]
+  search: string
+  filterPrioridade: Prioridade | 'all'
+}) {
+  const filtered = filterAreas(areas, search, 'all', filterPrioridade)
+
   return (
     <div className="space-y-6">
       {/* Phase timeline */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
         <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Linha do Tempo por Fase</p>
         <div className="space-y-3">
-          {FASES.map((fase, fi) => (
-            <div key={fase.id} className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-gray-500">{fi + 1}</span>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm font-medium text-gray-700">{fase.label}</p>
-                  {areas.filter(a => a.fase === fase.id).map(a => (
-                    <span key={a.id} className="flex items-center gap-1">
-                      <span className={`w-2 h-2 rounded-full ${FASE_DOT[a.fase]}`} />
-                      <span className="text-xs text-gray-500">{a.nome}</span>
-                    </span>
-                  ))}
+          {FASES.map((fase, fi) => {
+            const areasNaFase = filtered.filter(a => a.fase === fase.id)
+            return (
+              <div key={fase.id} className={`flex items-center gap-3 ${areasNaFase.length === 0 && filtered.length !== areas.length ? 'opacity-40' : ''}`}>
+                <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-bold text-gray-500">{fi + 1}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-700">{fase.label}</p>
+                    {areasNaFase.map(a => (
+                      <span key={a.id} className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${FASE_DOT[a.fase]}`} />
+                        <span className="text-xs text-gray-500">{a.nome}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
       {/* Summary matrix */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 overflow-x-auto">
-        <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Matriz de Status</p>
-        <table className="w-full text-xs">
-          <thead>
-            <tr>
-              <th className="text-left font-semibold text-gray-600 pb-2 pr-4">Área</th>
-              {FASES.map(f => (
-                <th key={f.id} className="text-center font-semibold text-gray-600 pb-2 px-1 whitespace-nowrap">
-                  {f.label.split(' ')[0]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {areas.map(a => {
-              const cur = faseIndex(a.fase)
-              return (
-                <tr key={a.id} className="border-t border-gray-50">
-                  <td className="py-2 pr-4 font-medium text-gray-700">{a.nome}</td>
-                  {FASES.map((f, fi) => {
-                    const cell = fi < cur ? '✓' : fi === cur ? '◉' : '○'
-                    const cls = fi < cur ? 'text-green-600 font-bold' : fi === cur ? 'text-[#1B4332] font-black' : 'text-gray-300'
-                    return (
-                      <td key={f.id} className={`text-center py-2 px-1 ${cls}`}>{cell}</td>
-                    )
-                  })}
+        <p className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
+          Matriz de Status {filtered.length !== areas.length && <span className="text-gray-400 font-normal normal-case">({filtered.length} de {areas.length} áreas)</span>}
+        </p>
+        {filtered.length === 0
+          ? <EmptyState label="Nenhuma área encontrada com esses filtros." />
+          : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left font-semibold text-gray-600 pb-2 pr-4">Área</th>
+                  {FASES.map(f => (
+                    <th key={f.id} className="text-center font-semibold text-gray-600 pb-2 px-1 whitespace-nowrap">
+                      {f.label.split(' ')[0]}
+                    </th>
+                  ))}
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {filtered.map(a => {
+                  const cur = faseIndex(a.fase)
+                  return (
+                    <tr key={a.id} className="border-t border-gray-50">
+                      <td className="py-2 pr-4 font-medium text-gray-700">{a.nome}</td>
+                      {FASES.map((f, fi) => {
+                        const cell = fi < cur ? '✓' : fi === cur ? '◉' : '○'
+                        const cls = fi < cur ? 'text-green-600 font-bold' : fi === cur ? 'text-[#1B4332] font-black' : 'text-gray-300'
+                        return (
+                          <td key={f.id} className={`text-center py-2 px-1 ${cls}`}>{cell}</td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )
+        }
       </div>
     </div>
   )
@@ -414,7 +467,7 @@ function TabCronograma({ areas }: { areas: Area[] }) {
 
 // ─── Tab: Checklists ─────────────────────────────────────────────────────────
 
-function TabChecklists({ areas }: { areas: Area[] }) {
+function TabChecklists({ areas, search }: { areas: Area[]; search: string }) {
   const [selectedArea, setSelectedArea] = useState(areas[0].id)
   const [selectedFase, setSelectedFase] = useState<Fase>('planejamento')
   const [checks, setChecks] = useState<Record<string, boolean>>({})
@@ -423,14 +476,22 @@ function TabChecklists({ areas }: { areas: Area[] }) {
     setChecks(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const q = search.toLowerCase()
+  const filteredAreas = areas.filter(a =>
+    !q || a.nome.toLowerCase().includes(q) || faseInfo(a.fase).label.toLowerCase().includes(q)
+  )
+
   const phaseItems = CHECKLIST_PHASES.find(p => p.fase === selectedFase)?.itens ?? []
-  const done = phaseItems.filter((_, i) => checks[`${selectedArea}-${selectedFase}-${i}`]).length
+  const filteredItems = phaseItems.filter(item =>
+    !q || item.desc.toLowerCase().includes(q) || item.cat.toLowerCase().includes(q) || faseInfo(selectedFase).label.toLowerCase().includes(q)
+  )
+  const done = filteredItems.filter((_, i) => checks[`${selectedArea}-${selectedFase}-${i}`]).length
 
   return (
     <div className="space-y-4">
       {/* Area selector */}
       <div className="flex flex-wrap gap-2">
-        {areas.map(a => (
+        {filteredAreas.map(a => (
           <button
             key={a.id}
             onClick={() => setSelectedArea(a.id)}
@@ -439,6 +500,7 @@ function TabChecklists({ areas }: { areas: Area[] }) {
             {a.nome}
           </button>
         ))}
+        {filteredAreas.length === 0 && <p className="text-sm text-gray-400">Nenhuma área encontrada.</p>}
       </div>
 
       {/* Phase selector */}
@@ -459,31 +521,36 @@ function TabChecklists({ areas }: { areas: Area[] }) {
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-bold text-gray-900 uppercase tracking-wider">{faseInfo(selectedFase).label}</p>
           <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-            {done}/{phaseItems.length} itens
+            {done}/{filteredItems.length} itens
           </span>
         </div>
-        <div className="space-y-2">
-          {phaseItems.map((item, i) => {
-            const key = `${selectedArea}-${selectedFase}-${i}`
-            const checked = !!checks[key]
-            return (
-              <label key={i} className="flex items-start gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(key)}
-                  className="mt-0.5 accent-[#1B4332] flex-shrink-0"
-                />
-                <span className={`text-sm flex-1 ${checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                  {item.desc}
-                </span>
-                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">
-                  {item.cat}
-                </span>
-              </label>
-            )
-          })}
-        </div>
+        {filteredItems.length === 0
+          ? <EmptyState label="Nenhum item encontrado com essa busca." />
+          : (
+            <div className="space-y-2">
+              {filteredItems.map((item, i) => {
+                const key = `${selectedArea}-${selectedFase}-${i}`
+                const checked = !!checks[key]
+                return (
+                  <label key={i} className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(key)}
+                      className="mt-0.5 accent-[#1B4332] flex-shrink-0"
+                    />
+                    <span className={`text-sm flex-1 ${checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                      {item.desc}
+                    </span>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">
+                      {item.cat}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )
+        }
       </div>
     </div>
   )
@@ -517,7 +584,7 @@ function nextStatusLabel(s: FeedbackStatus) {
   return STATUS_COLS.find(c => c.id === n)?.label ?? null
 }
 
-function TabFeedbacks({ areas }: { areas: Area[] }) {
+function TabFeedbacks({ areas, search }: { areas: Area[]; search: string }) {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>(FEEDBACKS_INIT)
   const [showForm, setShowForm] = useState(false)
   const [filterTipo, setFilterTipo] = useState<FeedbackTipo | 'all'>('all')
@@ -541,9 +608,11 @@ function TabFeedbacks({ areas }: { areas: Area[] }) {
     }))
   }
 
+  const q = search.toLowerCase()
   const filtered = feedbacks.filter(f =>
     (filterTipo === 'all' || f.tipo === filterTipo) &&
-    (filterArea === 'all' || f.area === filterArea)
+    (filterArea === 'all' || f.area === filterArea) &&
+    (!q || f.titulo.toLowerCase().includes(q) || f.descricao.toLowerCase().includes(q) || f.area.toLowerCase().includes(q))
   )
 
   return (
@@ -693,28 +762,101 @@ const TABS: { id: Tab; label: string }[] = [
 export function ImplantacaoPage() {
   const [tab, setTab] = useState<Tab>('visao')
   const [areas, setAreas] = useState<Area[]>(AREAS_INIT)
+  const [search, setSearch] = useState('')
+  const [filterFase, setFilterFase] = useState<Fase | 'all'>('all')
+  const [filterPrioridade, setFilterPrioridade] = useState<Prioridade | 'all'>('all')
+  const [scrolled, setScrolled] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [])
+
+  const hasFilters = search || filterFase !== 'all' || filterPrioridade !== 'all'
 
   return (
     <div className="space-y-4">
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl border border-gray-100 p-1 overflow-x-auto">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${tab === t.id ? 'bg-[#1B4332] text-white' : 'text-gray-500 hover:text-gray-900'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Sentinel — detecta quando o topo sai da viewport */}
+      <div ref={sentinelRef} className="h-px -mt-1" />
+
+      {/* Sticky header */}
+      <div className={`sticky top-0 z-10 bg-white rounded-xl border border-gray-200 transition-shadow duration-200 ${scrolled ? 'shadow-md' : 'shadow-none border-gray-100'}`}>
+        {/* Tabs row */}
+        <div className="flex gap-1 p-1 overflow-x-auto">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${tab === t.id ? 'bg-[#1B4332] text-white' : 'text-gray-500 hover:text-gray-900'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search + filters — aparece ao rolar */}
+        <div className={`overflow-hidden transition-all duration-200 ${scrolled ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="flex items-center gap-2 px-2 pb-2 flex-wrap border-t border-gray-100 pt-2">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar áreas, módulos, etapas..."
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#1B4332] bg-gray-50"
+              />
+            </div>
+
+            {/* Fase filter */}
+            <select
+              value={filterFase}
+              onChange={e => setFilterFase(e.target.value as Fase | 'all')}
+              className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B4332] text-gray-600 bg-gray-50"
+            >
+              <option value="all">Todas as fases</option>
+              {FASES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+
+            {/* Prioridade filter */}
+            <select
+              value={filterPrioridade}
+              onChange={e => setFilterPrioridade(e.target.value as Prioridade | 'all')}
+              className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1B4332] text-gray-600 bg-gray-50"
+            >
+              <option value="all">Todas as prioridades</option>
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="baixa">Baixa</option>
+            </select>
+
+            {/* Clear filters */}
+            {hasFilters && (
+              <button
+                onClick={() => { setSearch(''); setFilterFase('all'); setFilterPrioridade('all') }}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={12} /> Limpar
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Tab content */}
-      {tab === 'visao' && <TabVisaoGeral areas={areas} />}
-      {tab === 'areas' && <TabAreas areas={areas} setAreas={setAreas} />}
-      {tab === 'cronograma' && <TabCronograma areas={areas} />}
-      {tab === 'checklists' && <TabChecklists areas={areas} />}
-      {tab === 'feedbacks' && <TabFeedbacks areas={areas} />}
+      {tab === 'visao' && <TabVisaoGeral areas={areas} search={search} filterFase={filterFase} filterPrioridade={filterPrioridade} />}
+      {tab === 'areas' && <TabAreas areas={areas} setAreas={setAreas} search={search} filterFase={filterFase} filterPrioridade={filterPrioridade} />}
+      {tab === 'cronograma' && <TabCronograma areas={areas} search={search} filterPrioridade={filterPrioridade} />}
+      {tab === 'checklists' && <TabChecklists areas={areas} search={search} />}
+      {tab === 'feedbacks' && <TabFeedbacks areas={areas} search={search} />}
     </div>
   )
 }
