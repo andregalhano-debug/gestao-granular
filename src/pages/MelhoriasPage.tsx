@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   Plus, X, Sparkles, Wand2, AlertTriangle, CheckCircle2, Clock,
   BarChart3, LayoutGrid, Lock, Bell, ArrowRight, TrendingUp,
-  Target, Activity, Zap, Filter,
+  Target, Activity, Zap, Filter, User,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useImprovements, useImprovementNotifications } from '../hooks/useLocalData'
@@ -14,16 +14,117 @@ import type {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GRANULAR_MENUS = [
-  { path: '/', label: 'Home', desc: 'Prioridades e agenda' },
-  { path: '/dashboard', label: 'Dashboard', desc: 'Receita e CRM' },
-  { path: '/agenda', label: 'Agenda', desc: 'Reuniões e eventos' },
-  { path: '/tarefas', label: 'Tarefas', desc: 'Checklist da equipe' },
-  { path: '/clientes', label: 'Clientes', desc: 'Pipeline comercial' },
-  { path: '/docs', label: 'Docs', desc: 'Links e documentos' },
-  { path: '/implantacao', label: 'Gestão de Implantação', desc: 'Cronograma e adoção' },
-  { path: '/settings', label: 'Configurações', desc: 'Usuários e permissões' },
-  { path: '/geral', label: 'Geral / Sistema', desc: 'Infraestrutura e performance' },
+  {
+    group: 'Home',
+    options: [
+      { path: '/', label: 'Home', desc: 'Prioridades e agenda' },
+      { path: '/home/prioridades-kanban', label: 'Home › Prioridades — Kanban', desc: 'Kanban semanal / diário / mensal' },
+      { path: '/home/prioridades-lista', label: 'Home › Prioridades — Lista', desc: 'Visualização em lista' },
+      { path: '/home/reunioes', label: 'Home › Próximas Reuniões', desc: 'Painel de próximas reuniões' },
+      { path: '/home/temas', label: 'Home › Distribuição de Temas', desc: 'Gráfico de temas pendentes' },
+      { path: '/home/historico', label: 'Home › Histórico de Exclusões', desc: 'Prioridades excluídas' },
+    ],
+  },
+  {
+    group: 'Dashboard',
+    options: [
+      { path: '/dashboard', label: 'Dashboard', desc: 'Receita e CRM' },
+      { path: '/dashboard/kpis', label: 'Dashboard › KPIs', desc: 'Clientes ativos, MRR, Pipeline, Churn' },
+      { path: '/dashboard/mrr', label: 'Dashboard › Receita por Cliente (MRR)', desc: 'Ranking de receita por cliente' },
+      { path: '/dashboard/pipeline', label: 'Dashboard › Pipeline Kanban', desc: 'Stages: Prospecto → Ativo' },
+      { path: '/dashboard/contratos', label: 'Dashboard › Contratos', desc: 'Datas de início e fim de contrato' },
+      { path: '/dashboard/segmentos', label: 'Dashboard › Segmentos', desc: 'Food, Market, Farma, Outro' },
+      { path: '/dashboard/crm', label: 'Dashboard › CRM — Disparos Sugeridos', desc: 'Mensagens para clientes em risco' },
+    ],
+  },
+  {
+    group: 'Agenda',
+    options: [
+      { path: '/agenda', label: 'Agenda', desc: 'Reuniões e eventos' },
+      { path: '/agenda/dia', label: 'Agenda › Visualização Dia', desc: 'Reuniões do dia selecionado' },
+      { path: '/agenda/semanal', label: 'Agenda › Visualização Semanal', desc: 'Grid semanal de reuniões' },
+      { path: '/agenda/mensal', label: 'Agenda › Visualização Mensal', desc: 'Calendário mensal' },
+      { path: '/agenda/lista', label: 'Agenda › Visualização Lista', desc: 'Próximas e realizadas' },
+      { path: '/agenda/filtros', label: 'Agenda › Filtros e Busca', desc: 'Busca, participante, tipo de reunião' },
+      { path: '/agenda/modal', label: 'Agenda › Modal de Reunião', desc: 'Formulário adicionar / editar reunião' },
+    ],
+  },
+  {
+    group: 'Tarefas',
+    options: [
+      { path: '/tarefas', label: 'Tarefas', desc: 'Checklist da equipe' },
+      { path: '/tarefas/kanban', label: 'Tarefas › Kanban por Área', desc: '7 colunas: Produto, Comercial, Jurídico…' },
+      { path: '/tarefas/lista', label: 'Tarefas › Lista por Área', desc: 'Agrupado por área com accordion' },
+      { path: '/tarefas/filtros', label: 'Tarefas › Filtros e Busca', desc: 'Responsável, área, prioridade, datas' },
+      { path: '/tarefas/formulario', label: 'Tarefas › Formulário de Adição', desc: 'Criar nova tarefa' },
+      { path: '/tarefas/concluidas', label: 'Tarefas › Concluídas', desc: 'Seção de tarefas concluídas' },
+      { path: '/tarefas/historico', label: 'Tarefas › Histórico de Excluídas', desc: 'Tarefas removidas com opção de restaurar' },
+    ],
+  },
+  {
+    group: 'Clientes',
+    options: [
+      { path: '/clientes', label: 'Clientes', desc: 'Pipeline comercial' },
+      { path: '/clientes/lista', label: 'Clientes › Lista e Detalhes', desc: 'Accordion com detalhes inline' },
+      { path: '/clientes/filtros', label: 'Clientes › Filtros e Busca', desc: 'Stage, status, responsável' },
+      { path: '/clientes/formulario', label: 'Clientes › Formulário de Cliente', desc: 'Criar ou editar cliente' },
+      { path: '/clientes/stage', label: 'Clientes › Controle de Stage', desc: 'Prospecto → Contato → Proposta → Ativo' },
+      { path: '/clientes/relacionamento', label: 'Clientes › Status de Relacionamento', desc: 'Ativo, Perdido, Recuperado, Churn' },
+      { path: '/clientes/historico', label: 'Clientes › Histórico de Removidos', desc: 'Clientes excluídos com restauração' },
+    ],
+  },
+  {
+    group: 'Docs',
+    options: [
+      { path: '/docs', label: 'Docs', desc: 'Links e documentos' },
+      { path: '/docs/drive', label: 'Docs › Google Drive', desc: 'Arquivos no Drive' },
+      { path: '/docs/apresentacoes', label: 'Docs › Apresentações', desc: 'Decks e apresentações' },
+      { path: '/docs/juridico', label: 'Docs › Jurídico', desc: 'Documentos jurídicos' },
+      { path: '/docs/comercial', label: 'Docs › Comercial', desc: 'Materiais comerciais' },
+      { path: '/docs/benchmarks', label: 'Docs › Benchmarks iFood', desc: 'Referências e benchmarks' },
+    ],
+  },
+  {
+    group: 'Gestão de Implantação',
+    options: [
+      { path: '/implantacao', label: 'Implantação', desc: 'Cronograma e adoção' },
+      { path: '/implantacao/visao-geral', label: 'Implantação › Visão Geral', desc: 'KPIs, progresso e diretivas da IA' },
+      { path: '/implantacao/areas', label: 'Implantação › Áreas', desc: 'Gestão das áreas de implantação' },
+      { path: '/implantacao/cronograma', label: 'Implantação › Cronograma', desc: 'Linha do tempo e matriz de status' },
+      { path: '/implantacao/checklists', label: 'Implantação › Checklists', desc: 'Checklists por área e fase' },
+      { path: '/implantacao/feedbacks', label: 'Implantação › Feedbacks', desc: 'Kanban: Novo → Em Análise → Resolvido' },
+    ],
+  },
+  {
+    group: 'Configurações',
+    options: [
+      { path: '/settings', label: 'Configurações', desc: 'Usuários e permissões' },
+      { path: '/settings/usuarios', label: 'Configurações › Usuários', desc: 'Gestão de usuários, roles e menus' },
+      { path: '/settings/seguranca', label: 'Configurações › Segurança', desc: 'Senha e política de acesso' },
+      { path: '/settings/log', label: 'Configurações › Log de Alterações', desc: 'Auditoria das últimas 200 ações' },
+    ],
+  },
+  {
+    group: 'Sistema',
+    options: [
+      { path: '/sistema', label: 'Geral / Sistema', desc: 'Performance e infraestrutura' },
+      { path: '/sistema/login', label: 'Sistema › Autenticação e Login', desc: 'Tela de login e acesso' },
+      { path: '/sistema/navegacao', label: 'Sistema › Navegação e Menu', desc: 'Sidebar, bottom nav, mobile drawer' },
+      { path: '/sistema/mobile', label: 'Sistema › Mobile / Responsivo', desc: 'Layout e usabilidade mobile' },
+      { path: '/sistema/dark-mode', label: 'Sistema › Dark Mode', desc: 'Tema escuro' },
+      { path: '/sistema/performance', label: 'Sistema › Performance', desc: 'Velocidade e otimização geral' },
+    ],
+  },
 ]
+
+function findMenuOption(path: string) {
+  for (const group of GRANULAR_MENUS) {
+    const opt = group.options.find(o => o.path === path)
+    if (opt) return opt
+  }
+  return null
+}
+
 
 const STATUS_CONFIG: Record<ImprovementStatus, {
   label: string; color: string; bg: string; bar: string;
@@ -206,7 +307,12 @@ function ImprovementCard({ imp, isEduardo, onAdvance, onApproveEduardo, onCancel
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 dark:border-gray-700 gap-1 flex-wrap">
-        <span className="text-[10px] text-gray-400">{imp.requesterName} · {new Date(imp.createdAt).toLocaleDateString('pt-BR')}</span>
+        <div className="flex items-center gap-1 text-[10px]">
+          <User size={10} className="text-gray-400 flex-shrink-0" />
+          <span className="font-semibold text-gray-700 dark:text-gray-300">{imp.requesterName}</span>
+          <span className="text-gray-300 dark:text-gray-600">·</span>
+          <span className="text-gray-400">{new Date(imp.createdAt).toLocaleDateString('pt-BR')}</span>
+        </div>
         <div className="flex gap-1 flex-wrap">
           {imp.status !== 'concluido' && imp.status !== 'cancelado' && (
             <button
@@ -265,9 +371,10 @@ function DashboardView({ improvements }: { improvements: Improvement[] }) {
     config: TYPE_CONFIG[t],
   }))
 
-  const byMenu = GRANULAR_MENUS.map(m => ({
-    ...m,
-    count: active.filter(i => i.affectedMenu === m.path).length,
+  const byMenu = GRANULAR_MENUS.flatMap(g => g.options).map(o => ({
+    path: o.path,
+    label: o.label,
+    count: active.filter(i => i.affectedMenu === o.path).length,
   })).filter(m => m.count > 0).sort((a, b) => b.count - a.count)
 
   const byPriority = (['alta', 'media', 'baixa'] as ImprovementPriority[]).map(p => ({
@@ -449,7 +556,7 @@ export function MelhoriasPage() {
     title: '',
     description: '',
     refinedDescription: '',
-    affectedMenu: '/agenda',
+    affectedMenu: '/',
     type: 'melhoria' as ImprovementType,
     priority: 'media' as ImprovementPriority,
     tags: '',
@@ -523,7 +630,7 @@ export function MelhoriasPage() {
 
   function refineWithPromptForge() {
     if (!form.title || !form.description) return
-    const menu = GRANULAR_MENUS.find(m => m.path === form.affectedMenu)
+    const menu = findMenuOption(form.affectedMenu)
     const refined = runPromptForge(form.title, form.description, form.type, menu?.label ?? form.affectedMenu)
     setForm(f => ({ ...f, refinedDescription: refined }))
     setShowPromptForge(true)
@@ -531,7 +638,7 @@ export function MelhoriasPage() {
 
   function submitImprovement() {
     if (!form.title.trim() || !form.description.trim()) return
-    const menu = GRANULAR_MENUS.find(m => m.path === form.affectedMenu)
+    const menu = findMenuOption(form.affectedMenu)
     const now = new Date().toISOString()
     const isStructural = form.type === 'estrutural'
 
@@ -571,14 +678,14 @@ export function MelhoriasPage() {
     }
 
     setShowModal(false)
-    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/agenda', type: 'melhoria', priority: 'media', tags: '' })
+    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', type: 'melhoria', priority: 'media', tags: '' })
     setShowPromptForge(false)
   }
 
   function closeModal() {
     setShowModal(false)
     setShowPromptForge(false)
-    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/agenda', type: 'melhoria', priority: 'media', tags: '' })
+    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', type: 'melhoria', priority: 'media', tags: '' })
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -704,7 +811,11 @@ export function MelhoriasPage() {
             className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300"
           >
             <option value="todos">Todos os menus</option>
-            {GRANULAR_MENUS.map(m => <option key={m.path} value={m.path}>{m.label}</option>)}
+            {GRANULAR_MENUS.map(g => (
+              <optgroup key={g.group} label={g.group}>
+                {g.options.map(o => <option key={o.path} value={o.path}>{o.label}</option>)}
+              </optgroup>
+            ))}
           </select>
         </div>
       )}
@@ -809,8 +920,20 @@ export function MelhoriasPage() {
                     onChange={e => setForm(f => ({ ...f, affectedMenu: e.target.value }))}
                     className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332]"
                   >
-                    {GRANULAR_MENUS.map(m => <option key={m.path} value={m.path}>{m.label}</option>)}
+                    {GRANULAR_MENUS.map(g => (
+                      <optgroup key={g.group} label={`── ${g.group}`}>
+                        {g.options.map(o => (
+                          <option key={o.path} value={o.path}>{o.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
+                  {form.affectedMenu && (() => {
+                    const opt = findMenuOption(form.affectedMenu)
+                    return opt ? (
+                      <p className="text-[10px] text-gray-400 mt-1 ml-1">{opt.desc}</p>
+                    ) : null
+                  })()}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Tipo *</label>
@@ -914,6 +1037,16 @@ export function MelhoriasPage() {
                     </pre>
                   </div>
                 )}
+              </div>
+
+              {/* Solicitante (auto) */}
+              <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                <User size={14} className="text-gray-400 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500">Solicitante</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{user?.name}</p>
+                  <p className="text-[10px] text-gray-400">{user?.email}</p>
+                </div>
               </div>
 
               {/* Tags */}
