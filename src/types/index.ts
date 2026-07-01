@@ -84,3 +84,45 @@ export interface ChangeLog {
   detail: string
   timestamp: string
 }
+
+export type ImprovementStatus = 'backlog' | 'analise' | 'desenvolvimento' | 'validacao' | 'concluido' | 'cancelado'
+export type ImprovementType = 'bug' | 'melhoria' | 'estrutural'
+export type ImprovementPriority = 'alta' | 'media' | 'baixa'
+
+export interface ImprovementStatusEntry {
+  status: ImprovementStatus
+  by: string
+  at: string
+}
+
+export interface Improvement {
+  id: string
+  title: string
+  description: string
+  refinedDescription?: string
+  affectedMenu: string
+  affectedMenuLabel: string
+  type: ImprovementType
+  priority: ImprovementPriority
+  status: ImprovementStatus
+  requester: string
+  requesterName: string
+  requiresEduardoApproval: boolean
+  eduardoApprovedAt?: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+  completedAt?: string
+  statusHistory: ImprovementStatusEntry[]
+  notified: boolean
+}
+
+export interface ImprovementNotification {
+  id: string
+  improvementId: string
+  improvementTitle: string
+  message: string
+  to: string
+  read: boolean
+  createdAt: string
+}

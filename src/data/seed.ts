@@ -1,4 +1,4 @@
-import type { Task, Client, Meeting, Priority } from '../types'
+import type { Task, Client, Meeting, Priority, Improvement } from '../types'
 
 export const seedTasks: Task[] = [
   // Jurídico
@@ -35,6 +35,97 @@ export const seedMeetings: Meeting[] = [
   { id: '1', title: 'Alinhamento sócios', date: '2026-06-30T09:00', participants: ['A', 'E', 'G'], recurring: true },
   { id: '2', title: 'Reunião SAJ & Manish', date: '2026-07-01T10:00', participants: ['A', 'G'], notes: 'Apresentar proposta final. Não sair sem assinatura.' },
   { id: '3', title: 'Demo Dorival', date: '2026-07-04T14:00', participants: ['G'], notes: 'Mostrar sistema ao vivo. Foco no dashboard de vendas.' },
+]
+
+export const seedImprovements: Improvement[] = [
+  {
+    id: 'imp-1',
+    title: 'Filtro por período na Agenda',
+    description: 'Adicionar filtro de data inicial e final para visualizar reuniões de um período específico com mais agilidade.',
+    refinedDescription: '**Contexto:** Aprimoramento de funcionalidade existente na área de Agenda.\n\n**Problema / Oportunidade:**\nAdicionar filtro de data inicial e final para visualizar reuniões de um período específico com mais agilidade.\n\n**Comportamento Esperado:**\n**Filtro por período na Agenda** implementado em **Agenda** com experiência de uso consistente e sem regressões.\n\n**Critérios de Aceite:**\n- [ ] Funcionalidade implementada conforme especificado\n- [ ] Validado pelo solicitante no ambiente de testes\n- [ ] Sem regressão em outras áreas do sistema\n\n**Impacto:** Médio — melhora UX sem alterar estrutura base\n\n**Área Afetada:** Agenda',
+    affectedMenu: '/agenda',
+    affectedMenuLabel: 'Agenda',
+    type: 'melhoria',
+    priority: 'media',
+    status: 'desenvolvimento',
+    requester: 'andre.galhano@grupogranular.com.br',
+    requesterName: 'André',
+    requiresEduardoApproval: false,
+    tags: ['UX', 'filtro'],
+    createdAt: '2026-06-28T10:00:00Z',
+    updatedAt: '2026-06-29T14:00:00Z',
+    statusHistory: [
+      { status: 'backlog', by: 'André', at: '2026-06-28T10:00:00Z' },
+      { status: 'analise', by: 'Eduardo', at: '2026-06-28T15:00:00Z' },
+      { status: 'desenvolvimento', by: 'Eduardo', at: '2026-06-29T14:00:00Z' },
+    ],
+    notified: false,
+  },
+  {
+    id: 'imp-2',
+    title: 'Reestruturação do Pipeline de Clientes por Segmento',
+    description: 'Separar o pipeline de clientes em abas por segmento (food, market, farma) para visualização mais clara.',
+    refinedDescription: '**Contexto:** Mudança arquitetural com impacto em múltiplas áreas na área de Clientes.\n\n**Problema / Oportunidade:**\nSeparar o pipeline de clientes em abas por segmento (food, market, farma) para visualização mais clara.\n\n**Comportamento Esperado:**\n**Reestruturação do Pipeline de Clientes** implementada com abas por segmento e sem perda de dados existentes.\n\n**Critérios de Aceite:**\n- [ ] Funcionalidade implementada conforme especificado\n- [ ] Validado pelo solicitante no ambiente de testes\n- [ ] Sem regressão em outras áreas do sistema\n- [ ] Aprovação estratégica do Eduardo antes do início do desenvolvimento\n\n**Impacto:** Alto — requer validação estratégica antes da execução\n\n**Área Afetada:** Clientes\n\n⚠️ **Atenção:** Mudança estrutural — requer aprovação do Eduardo antes de avançar para desenvolvimento.',
+    affectedMenu: '/clientes',
+    affectedMenuLabel: 'Clientes',
+    type: 'estrutural',
+    priority: 'alta',
+    status: 'analise',
+    requester: 'andre.galhano@grupogranular.com.br',
+    requesterName: 'André',
+    requiresEduardoApproval: true,
+    tags: ['estrutural', 'segmento'],
+    createdAt: '2026-06-30T09:00:00Z',
+    updatedAt: '2026-06-30T09:00:00Z',
+    statusHistory: [
+      { status: 'backlog', by: 'André', at: '2026-06-30T09:00:00Z' },
+      { status: 'analise', by: 'André', at: '2026-06-30T09:00:00Z' },
+    ],
+    notified: false,
+  },
+  {
+    id: 'imp-3',
+    title: 'Exportar relatório do Dashboard em PDF',
+    description: 'Adicionar botão para exportar os dados e gráficos do Dashboard como relatório PDF.',
+    affectedMenu: '/dashboard',
+    affectedMenuLabel: 'Dashboard',
+    type: 'melhoria',
+    priority: 'baixa',
+    status: 'backlog',
+    requester: 'andre.galhano@grupogranular.com.br',
+    requesterName: 'André',
+    requiresEduardoApproval: false,
+    tags: ['exportar', 'relatório'],
+    createdAt: '2026-07-01T08:00:00Z',
+    updatedAt: '2026-07-01T08:00:00Z',
+    statusHistory: [
+      { status: 'backlog', by: 'André', at: '2026-07-01T08:00:00Z' },
+    ],
+    notified: false,
+  },
+  {
+    id: 'imp-4',
+    title: 'Erro no salvamento de notas em tarefas concluídas',
+    description: 'Ao tentar salvar uma nota em uma tarefa já marcada como concluída, o campo limpa sem salvar.',
+    affectedMenu: '/tarefas',
+    affectedMenuLabel: 'Tarefas',
+    type: 'bug',
+    priority: 'alta',
+    status: 'validacao',
+    requester: 'andre.galhano@grupogranular.com.br',
+    requesterName: 'André',
+    requiresEduardoApproval: false,
+    tags: ['bug', 'notas'],
+    createdAt: '2026-06-25T11:00:00Z',
+    updatedAt: '2026-06-30T16:00:00Z',
+    statusHistory: [
+      { status: 'backlog', by: 'André', at: '2026-06-25T11:00:00Z' },
+      { status: 'analise', by: 'Eduardo', at: '2026-06-26T09:00:00Z' },
+      { status: 'desenvolvimento', by: 'Eduardo', at: '2026-06-27T10:00:00Z' },
+      { status: 'validacao', by: 'Eduardo', at: '2026-06-30T16:00:00Z' },
+    ],
+    notified: false,
+  },
 ]
 
 export const seedPriorities: Priority[] = [
