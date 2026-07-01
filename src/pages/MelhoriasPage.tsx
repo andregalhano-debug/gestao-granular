@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, X, Sparkles, Wand2, AlertTriangle, CheckCircle2, Clock,
-  BarChart3, LayoutGrid, Lock, Bell, ArrowRight, TrendingUp,
-  Target, Activity, Zap, Filter, User,
+  BarChart3, LayoutGrid, List, Lock, Bell, ArrowRight, TrendingUp,
+  Target, Activity, Zap, Filter, User, ChevronDown,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useImprovements, useImprovementNotifications } from '../hooks/useLocalData'
@@ -538,6 +538,182 @@ function DashboardView({ improvements }: { improvements: Improvement[] }) {
   )
 }
 
+function ListView({ improvements, isEduardo, onAdvance, onApproveEduardo, onCancel }: {
+  improvements: Improvement[]
+  isEduardo: boolean
+  onAdvance: (imp: Improvement) => void
+  onApproveEduardo: (imp: Improvement) => void
+  onCancel: (imp: Improvement) => void
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  if (improvements.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+        <Zap size={32} className="mb-3 opacity-30" />
+        <p className="text-sm">Nenhuma melhoria encontrada</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+      {/* Table header */}
+      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-2.5 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <span className="w-6" />
+        <span>Título</span>
+        <span className="w-28 text-center">Status</span>
+        <span className="w-20 text-center">Prioridade</span>
+        <span className="w-24 text-center">Solicitante</span>
+        <span className="w-28 text-right">Ações</span>
+      </div>
+
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        {improvements.map(imp => {
+          const typeConf = TYPE_CONFIG[imp.type]
+          const prioConf = PRIORITY_CONFIG[imp.priority]
+          const statusConf = STATUS_CONFIG[imp.status]
+          const isOpen = expanded === imp.id
+
+          const blockedByEduardo = imp.requiresEduardoApproval && imp.status === 'analise' && !imp.eduardoApprovedAt
+          const nextIsConclusion = statusConf.next === 'concluido'
+          const canAdvance = !!statusConf.next && !blockedByEduardo && (!nextIsConclusion || isEduardo)
+          const canEduardoApprove = blockedByEduardo && isEduardo
+
+          return (
+            <div key={imp.id}>
+              {/* Main row */}
+              <div
+                className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors cursor-pointer"
+                onClick={() => setExpanded(isOpen ? null : imp.id)}
+              >
+                {/* Type icon */}
+                <span className="text-base w-6 text-center flex-shrink-0" title={typeConf.label}>{typeConf.icon}</span>
+
+                {/* Title + menu */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{imp.title}</p>
+                    {imp.requiresEduardoApproval && (
+                      imp.eduardoApprovedAt
+                        ? <CheckCircle2 size={12} className="text-green-500 flex-shrink-0" />
+                        : <Lock size={12} className="text-purple-500 flex-shrink-0" />
+                    )}
+                    <ChevronDown
+                      size={12}
+                      className={`text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 truncate mt-0.5">{imp.affectedMenuLabel}</p>
+                </div>
+
+                {/* Status badge */}
+                <span className={`w-28 text-center text-[10px] font-medium px-2 py-1 rounded-full ${statusConf.bg} ${statusConf.color}`}>
+                  {statusConf.label}
+                </span>
+
+                {/* Priority dot */}
+                <div className="w-20 flex items-center justify-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${prioConf.dot}`} />
+                  <span className="text-[11px] text-gray-500">{prioConf.label}</span>
+                </div>
+
+                {/* Requester */}
+                <div className="w-24 flex items-center gap-1 justify-center">
+                  <User size={11} className="text-gray-400 flex-shrink-0" />
+                  <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">{imp.requesterName}</span>
+                </div>
+
+                {/* Actions */}
+                <div className="w-28 flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                  {imp.status !== 'concluido' && imp.status !== 'cancelado' && (
+                    <button
+                      onClick={() => onCancel(imp)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                      title="Cancelar"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                  {canEduardoApprove && (
+                    <button
+                      onClick={() => onApproveEduardo(imp)}
+                      className="text-[10px] bg-purple-600 text-white px-2 py-1 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-0.5 whitespace-nowrap"
+                    >
+                      <CheckCircle2 size={10} /> Aprovar
+                    </button>
+                  )}
+                  {canAdvance && (
+                    <button
+                      onClick={() => onAdvance(imp)}
+                      className={`text-[10px] text-white px-2 py-1 rounded-lg transition-colors flex items-center gap-0.5 whitespace-nowrap ${
+                        nextIsConclusion ? 'bg-green-600 hover:bg-green-700' : 'bg-[#1B4332] hover:bg-[#1B4332]/90'
+                      }`}
+                    >
+                      {statusConf.nextLabel} <ArrowRight size={10} />
+                    </button>
+                  )}
+                  {nextIsConclusion && !isEduardo && (
+                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5 whitespace-nowrap">
+                      <Clock size={10} /> Eduardo
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded detail */}
+              {isOpen && (
+                <div className="px-6 pb-4 pt-0 bg-gray-50 dark:bg-gray-900/30 border-t border-gray-100 dark:border-gray-700">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Descrição</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{imp.description}</p>
+                      {imp.tags.length > 0 && (
+                        <div className="flex gap-1 flex-wrap mt-2">
+                          {imp.tags.map(tag => (
+                            <span key={tag} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Histórico</p>
+                      <div className="space-y-1">
+                        {imp.statusHistory.map((h, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className={`px-1.5 py-0.5 rounded-full ${STATUS_CONFIG[h.status].bg} ${STATUS_CONFIG[h.status].color}`}>
+                              {STATUS_CONFIG[h.status].label}
+                            </span>
+                            <span className="text-gray-500">por {h.by}</span>
+                            <span className="text-gray-400">{new Date(h.at).toLocaleDateString('pt-BR')}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {imp.refinedDescription && (
+                        <details className="mt-3">
+                          <summary className="text-[10px] text-[#1B4332] cursor-pointer flex items-center gap-1 font-medium">
+                            <Sparkles size={10} /> Ver spec PromptForge
+                          </summary>
+                          <pre className="mt-2 text-[10px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto text-gray-700 dark:text-gray-300">
+                            {imp.refinedDescription}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-3">
+                    Criado em {new Date(imp.createdAt).toLocaleDateString('pt-BR')} · Atualizado em {new Date(imp.updatedAt).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function MelhoriasPage() {
@@ -545,7 +721,7 @@ export function MelhoriasPage() {
   const [improvements, setImprovements] = useImprovements()
   const [notifications, setNotifications] = useImprovementNotifications()
 
-  const [tab, setTab] = useState<'kanban' | 'dashboard'>('kanban')
+  const [tab, setTab] = useState<'kanban' | 'lista' | 'dashboard'>('kanban')
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<ImprovementType | 'todos'>('todos')
   const [filterMenu, setFilterMenu] = useState<string>('todos')
@@ -557,6 +733,7 @@ export function MelhoriasPage() {
     description: '',
     refinedDescription: '',
     affectedMenu: '/',
+    customMenu: '',
     type: 'melhoria' as ImprovementType,
     priority: 'media' as ImprovementPriority,
     tags: '',
@@ -630,15 +807,19 @@ export function MelhoriasPage() {
 
   function refineWithPromptForge() {
     if (!form.title || !form.description) return
-    const menu = findMenuOption(form.affectedMenu)
-    const refined = runPromptForge(form.title, form.description, form.type, menu?.label ?? form.affectedMenu)
-    setForm(f => ({ ...f, refinedDescription: refined }))
+    const menuLabel = form.affectedMenu === '__outro__'
+      ? (form.customMenu.trim() || 'Outro')
+      : (findMenuOption(form.affectedMenu)?.label ?? form.affectedMenu)
+    setForm(f => ({ ...f, refinedDescription: runPromptForge(form.title, form.description, form.type, menuLabel) }))
     setShowPromptForge(true)
   }
 
   function submitImprovement() {
     if (!form.title.trim() || !form.description.trim()) return
-    const menu = findMenuOption(form.affectedMenu)
+    const isCustomMenu = form.affectedMenu === '__outro__'
+    const menu = isCustomMenu ? null : findMenuOption(form.affectedMenu)
+    const menuPath = isCustomMenu ? `outro:${form.customMenu.trim()}` : form.affectedMenu
+    const menuLabel = isCustomMenu ? (form.customMenu.trim() || 'Outro') : (menu?.label ?? form.affectedMenu)
     const now = new Date().toISOString()
     const isStructural = form.type === 'estrutural'
 
@@ -647,8 +828,8 @@ export function MelhoriasPage() {
       title: form.title.trim(),
       description: form.description.trim(),
       refinedDescription: form.refinedDescription || undefined,
-      affectedMenu: form.affectedMenu,
-      affectedMenuLabel: menu?.label ?? form.affectedMenu,
+      affectedMenu: menuPath,
+      affectedMenuLabel: menuLabel,
       type: form.type,
       priority: form.priority,
       status: 'backlog',
@@ -678,14 +859,14 @@ export function MelhoriasPage() {
     }
 
     setShowModal(false)
-    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', type: 'melhoria', priority: 'media', tags: '' })
+    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', customMenu: '', type: 'melhoria', priority: 'media', tags: '' })
     setShowPromptForge(false)
   }
 
   function closeModal() {
     setShowModal(false)
     setShowPromptForge(false)
-    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', type: 'melhoria', priority: 'media', tags: '' })
+    setForm({ title: '', description: '', refinedDescription: '', affectedMenu: '/', customMenu: '', type: 'melhoria', priority: 'media', tags: '' })
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -775,6 +956,15 @@ export function MelhoriasPage() {
           Kanban
         </button>
         <button
+          onClick={() => setTab('lista')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            tab === 'lista' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <List size={14} />
+          Lista
+        </button>
+        <button
           onClick={() => setTab('dashboard')}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
             tab === 'dashboard' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
@@ -785,8 +975,8 @@ export function MelhoriasPage() {
         </button>
       </div>
 
-      {/* Filters - apenas no kanban, dentro do sticky */}
-      {tab === 'kanban' && (
+      {/* Filters - kanban e lista */}
+      {(tab === 'kanban' || tab === 'lista') && (
         <div className="flex items-center gap-2 flex-wrap pb-1">
           <div className="flex items-center gap-1 text-xs text-gray-500">
             <Filter size={12} /> Tipo:
@@ -867,6 +1057,20 @@ export function MelhoriasPage() {
         </div>
       )}
 
+      {/* ── Lista ── */}
+      {tab === 'lista' && (
+        <div className="pt-2 pb-4">
+          <p className="text-xs text-gray-400 mb-3">{filtered.length} {filtered.length === 1 ? 'item' : 'itens'}</p>
+          <ListView
+            improvements={filtered}
+            isEduardo={isEduardo}
+            onAdvance={advanceStatus}
+            onApproveEduardo={approveEduardo}
+            onCancel={cancelImprovement}
+          />
+        </div>
+      )}
+
       {/* ── Dashboard ── */}
       {tab === 'dashboard' && <div className="pt-3"><DashboardView improvements={improvements} /></div>}
 
@@ -915,7 +1119,7 @@ export function MelhoriasPage() {
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Menu / Área *</label>
                   <select
                     value={form.affectedMenu}
-                    onChange={e => setForm(f => ({ ...f, affectedMenu: e.target.value }))}
+                    onChange={e => setForm(f => ({ ...f, affectedMenu: e.target.value, customMenu: '' }))}
                     className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332]"
                   >
                     {GRANULAR_MENUS.map(g => (
@@ -925,8 +1129,16 @@ export function MelhoriasPage() {
                         ))}
                       </optgroup>
                     ))}
+                    <option value="__outro__">── Outro (especificar)</option>
                   </select>
-                  {form.affectedMenu && (() => {
+                  {form.affectedMenu === '__outro__' ? (
+                    <input
+                      value={form.customMenu}
+                      onChange={e => setForm(f => ({ ...f, customMenu: e.target.value }))}
+                      placeholder="Ex: Relatório de Desempenho, Módulo X…"
+                      className="mt-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B4332] focus:ring-1 focus:ring-[#1B4332]/20"
+                    />
+                  ) : form.affectedMenu && (() => {
                     const opt = findMenuOption(form.affectedMenu)
                     return opt ? (
                       <p className="text-[10px] text-gray-400 mt-1 ml-1">{opt.desc}</p>
