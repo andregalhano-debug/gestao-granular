@@ -584,9 +584,12 @@ export function MelhoriasPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-full">
+    <div className="flex flex-col h-full">
+      {/* ── Header + Tabs + Filters: sticky, sempre visível ── */}
+      <div className="sticky top-0 lg:top-[60px] z-20 bg-[#F8F9FA] dark:bg-gray-900 pb-3 -mx-4 px-4 lg:-mx-8 lg:px-8 pt-1">
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <Zap size={20} className="text-[#1B4332]" />
@@ -654,7 +657,7 @@ export function MelhoriasPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-5 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+      <div className="flex items-center gap-1 mb-3 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
         <button
           onClick={() => setTab('kanban')}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -675,46 +678,49 @@ export function MelhoriasPage() {
         </button>
       </div>
 
-      {/* ── Kanban ── */}
+      {/* Filters - apenas no kanban, dentro do sticky */}
       {tab === 'kanban' && (
-        <>
-          {/* Filters */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Filter size={12} /> Tipo:
-            </div>
-            {(['todos', 'bug', 'melhoria', 'estrutural'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                  filterType === t
-                    ? 'bg-[#1B4332] text-white border-[#1B4332]'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-gray-400'
-                }`}
-              >
-                {t === 'todos' ? 'Todos' : `${TYPE_CONFIG[t].icon} ${TYPE_CONFIG[t].label}`}
-              </button>
-            ))}
-            <div className="w-px h-4 bg-gray-200 mx-1" />
-            <select
-              value={filterMenu}
-              onChange={e => setFilterMenu(e.target.value)}
-              className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300"
-            >
-              <option value="todos">Todos os menus</option>
-              {GRANULAR_MENUS.map(m => <option key={m.path} value={m.path}>{m.label}</option>)}
-            </select>
+        <div className="flex items-center gap-2 flex-wrap pb-1">
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Filter size={12} /> Tipo:
           </div>
+          {(['todos', 'bug', 'melhoria', 'estrutural'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                filterType === t
+                  ? 'bg-[#1B4332] text-white border-[#1B4332]'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-gray-400'
+              }`}
+            >
+              {t === 'todos' ? 'Todos' : `${TYPE_CONFIG[t].icon} ${TYPE_CONFIG[t].label}`}
+            </button>
+          ))}
+          <div className="w-px h-4 bg-gray-200 mx-1" />
+          <select
+            value={filterMenu}
+            onChange={e => setFilterMenu(e.target.value)}
+            className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+          >
+            <option value="todos">Todos os menus</option>
+            {GRANULAR_MENUS.map(m => <option key={m.path} value={m.path}>{m.label}</option>)}
+          </select>
+        </div>
+      )}
+      </div>{/* fim do sticky header */}
 
-          {/* Board */}
-          <div className="flex gap-4 overflow-x-auto pb-6">
+      {/* ── Kanban Board ── */}
+      {tab === 'kanban' && (
+        <div className="overflow-x-auto -mx-4 px-4 lg:-mx-8 lg:px-8 pb-4">
+          <div className="flex gap-3 pt-3" style={{ minWidth: 'max-content' }}>
             {KANBAN_COLS.map(status => {
               const config = STATUS_CONFIG[status]
               const cards = byStatus(status)
               return (
-                <div key={status} className="flex-shrink-0 w-72">
-                  <div className="flex items-center justify-between mb-3">
+                <div key={status} className="flex flex-col w-64 min-w-[256px]">
+                  {/* Cabeçalho da coluna */}
+                  <div className="flex items-center justify-between mb-2 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${config.bg} ${config.color}`}>
                         {config.label}
@@ -727,7 +733,8 @@ export function MelhoriasPage() {
                       </span>
                     )}
                   </div>
-                  <div className="space-y-3 min-h-[120px]">
+                  {/* Cards com scroll vertical interno */}
+                  <div className="overflow-y-auto space-y-2.5 pr-0.5" style={{ maxHeight: 'calc(100vh - 320px)' }}>
                     {cards.map(imp => (
                       <ImprovementCard
                         key={imp.id}
@@ -748,11 +755,11 @@ export function MelhoriasPage() {
               )
             })}
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Dashboard ── */}
-      {tab === 'dashboard' && <DashboardView improvements={improvements} />}
+      {tab === 'dashboard' && <div className="pt-3"><DashboardView improvements={improvements} /></div>}
 
       {/* ── Modal: Nova Melhoria ── */}
       {showModal && (
