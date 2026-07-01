@@ -446,9 +446,10 @@ function ClientDetail({ client: c, onEdit, onDelete, onClose, onStageChange, onR
         <p className="text-[10px] text-gray-300">
           Atualizado {format(parseISO(c.last_update), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
         </p>
-        <div className="flex items-center gap-1">
-          <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-[#1B4332] hover:bg-[#1B4332]/5 rounded-lg transition-colors" title="Editar">
-            <Edit2 size={13} />
+        <div className="flex items-center gap-1.5">
+          <button onClick={onEdit}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1B4332] text-white hover:bg-[#1B4332]/90 transition-colors">
+            <Edit2 size={12} /> Editar dados
           </button>
           <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Excluir">
             <Trash2 size={13} />
@@ -638,6 +639,13 @@ export function ClientesPage() {
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OWNER_COLORS[c.owner]}`}>
                   {c.owner}
                 </span>
+                <button
+                  onClick={e => { e.stopPropagation(); setEditingClient(c) }}
+                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1B4332]/40 hover:text-[#1B4332] transition-colors"
+                  title="Editar cliente"
+                >
+                  <Edit2 size={11} /> Editar
+                </button>
                 {expanded === c.id ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-300" />}
               </div>
             </button>

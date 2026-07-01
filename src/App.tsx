@@ -9,6 +9,7 @@ import { AgendaPage } from './pages/AgendaPage'
 import { DocsPage } from './pages/DocsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ImplantacaoPage } from './pages/ImplantacaoPage'
 import { MelhoriasPage } from './pages/MelhoriasPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="docs" element={<DocsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="implantacao" element={<ImplantacaoPage />} />
           <Route path="melhorias" element={<MelhoriasPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
