@@ -691,12 +691,12 @@ export function MelhoriasPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* ── Header + Tabs + Filters: sticky, sempre visível ── */}
-      <div className="sticky top-0 lg:top-[60px] z-20 bg-[#F8F9FA] dark:bg-gray-900 pb-3 -mx-4 px-4 lg:-mx-8 lg:px-8 pt-1">
+      <div className="sticky top-12 lg:top-16 z-10 bg-[#F8F9FA] dark:bg-gray-900 pb-3 mb-1 border-b border-gray-100 dark:border-gray-800">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between pt-1 mb-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <Zap size={20} className="text-[#1B4332]" />
@@ -823,49 +823,47 @@ export function MelhoriasPage() {
 
       {/* ── Kanban Board ── */}
       {tab === 'kanban' && (
-        <div className="overflow-x-auto -mx-4 px-4 lg:-mx-8 lg:px-8 pb-4">
-          <div className="flex gap-3 pt-3" style={{ minWidth: 'max-content' }}>
-            {KANBAN_COLS.map(status => {
-              const config = STATUS_CONFIG[status]
-              const cards = byStatus(status)
-              return (
-                <div key={status} className="flex flex-col w-64 min-w-[256px]">
-                  {/* Cabeçalho da coluna */}
-                  <div className="flex items-center justify-between mb-2 flex-shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${config.bg} ${config.color}`}>
-                        {config.label}
-                      </span>
-                      <span className="text-xs text-gray-400 font-medium">{cards.length}</span>
-                    </div>
-                    {status === 'validacao' && !isEduardo && cards.length > 0 && (
-                      <span className="text-[10px] text-purple-600 font-medium flex items-center gap-0.5">
-                        <Clock size={10} /> Eduardo conclui
-                      </span>
-                    )}
+        <div className="grid grid-cols-5 gap-2 pt-2 pb-4 min-w-0">
+          {KANBAN_COLS.map(status => {
+            const config = STATUS_CONFIG[status]
+            const cards = byStatus(status)
+            return (
+              <div key={status} className="flex flex-col min-w-0">
+                {/* Cabeçalho da coluna */}
+                <div className="flex items-center justify-between mb-2 flex-shrink-0 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${config.bg} ${config.color}`}>
+                      {config.label}
+                    </span>
+                    <span className="text-xs text-gray-400 font-medium flex-shrink-0">{cards.length}</span>
                   </div>
-                  {/* Cards com scroll vertical interno */}
-                  <div className="overflow-y-auto space-y-2.5 pr-0.5" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-                    {cards.map(imp => (
-                      <ImprovementCard
-                        key={imp.id}
-                        imp={imp}
-                        isEduardo={isEduardo}
-                        onAdvance={() => advanceStatus(imp)}
-                        onApproveEduardo={() => approveEduardo(imp)}
-                        onCancel={() => cancelImprovement(imp)}
-                      />
-                    ))}
-                    {cards.length === 0 && (
-                      <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 text-center text-xs text-gray-400">
-                        Nenhum item
-                      </div>
-                    )}
-                  </div>
+                  {status === 'validacao' && !isEduardo && cards.length > 0 && (
+                    <span className="text-[10px] text-purple-600 font-medium flex items-center gap-0.5 flex-shrink-0">
+                      <Clock size={10} />
+                    </span>
+                  )}
                 </div>
-              )
-            })}
-          </div>
+                {/* Cards com scroll vertical interno */}
+                <div className="overflow-y-auto space-y-2 pr-0.5" style={{ maxHeight: 'calc(100vh - 290px)' }}>
+                  {cards.map(imp => (
+                    <ImprovementCard
+                      key={imp.id}
+                      imp={imp}
+                      isEduardo={isEduardo}
+                      onAdvance={() => advanceStatus(imp)}
+                      onApproveEduardo={() => approveEduardo(imp)}
+                      onCancel={() => cancelImprovement(imp)}
+                    />
+                  ))}
+                  {cards.length === 0 && (
+                    <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 text-center text-xs text-gray-400">
+                      Nenhum item
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
